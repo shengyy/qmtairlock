@@ -599,10 +599,14 @@ def _login_via_window(credentials, window_title_prefix=None, appear_timeout_seco
 
 def restart_qmt(install_dir, settle_seconds=5.0, **open_kwargs):
     """Close QMT, allow process cleanup, then start and wait for the main window."""
+    settle_seconds = float(settle_seconds)
+    if not math.isfinite(settle_seconds) or settle_seconds < 0:
+        raise QmtLauncherError("settle_seconds must be finite and nonnegative")
+    requested_mode = str(open_kwargs.get("mode") or "auto").lower()
     bound = inspect.signature(open_qmt).bind(install_dir, **open_kwargs)
     bound.apply_defaults()
     _, mode = _validate_start(install_dir, bound.arguments)
-    if mode in ("login", "auto") and session_is_locked():
+    if (mode == "login" or requested_mode == "auto") and session_is_locked():
         raise QmtLauncherError(
             "interactive session is locked; the login dialog cannot be automated "
             "now. Unlock the session first, or restart without closing "

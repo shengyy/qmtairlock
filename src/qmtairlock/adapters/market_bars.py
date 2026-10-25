@@ -378,51 +378,60 @@ class MarketBars:
     def get_local_data(self, **kwargs):
         return self.native.first_supported(self._local_bar_shapes(**kwargs))
 
-    def _download(self, func_name, sdk_args, sdk_kwargs, ctx_call):
-        """Download history in Big QMT."""
+    @staticmethod
+    def _download_accepted(result, description):
+        if result is not None and not result:
+            raise RuntimeError("%s: terminal rejected the download (native return %r)" % (description, result))
+        return True
+
+    def _download(self, func_name, stock, period, start_time, end_time, incrementally):
+        """Select one native download channel and validate every native outcome."""
+        args = (stock, str(period or "1d"), str(start_time or ""), str(end_time or ""))
         function = self.qmt_api.get(func_name)
         if callable(function):
-            return function(*sdk_args, **sdk_kwargs)
-        down_history_data = self.qmt_api.get("down_history_data")
-        if callable(down_history_data):
-            if func_name == "download_history_data":
-                stock_code, period, start_time, end_time = sdk_args
-                return down_history_data(stock_code, period, start_time, end_time)
             if func_name == "download_history_data2":
-                stock_list, period, start_time, end_time = sdk_args
-                result = None
-                for stock_code in stock_list:
-                    result = down_history_data(stock_code, period, start_time, end_time)
-                return result
-        if getattr(self.context_info, func_name, None) is not None:
-            return ctx_call()
-        raise NotImplementedError(
-            "%s unavailable (down_history_data unavailable; ContextInfo has no %s)" % (func_name, func_name)
-        )
+                try:
+                    result = function(*(args + (lambda data: None,)))
+                except TypeError:
+                    result = function(*args)
+            else:
+                result = function(*args)
+            return self._download_accepted(result, func_name)
 
-    def download_history_data(self, stock_code, period, start_time="", end_time="", incrementally=None):
+        single = self.qmt_api.get("download_history_data")
+        if not callable(single):
+            single = self.qmt_api.get("down_history_data")
+        if callable(single):
+            if func_name == "download_history_data":
+                return self._download_accepted(single(*args), func_name)
+            errors = []
+            first_error = None
+            for code in stock:
+                try:
+                    self._download_accepted(single(code, *args[1:]), "%s code=%s" % (func_name, code))
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
+                    errors.append("%s: %s" % (code, exc))
+            if errors:
+                raise RuntimeError("%s per-code download failed: %s" % (func_name, "; ".join(errors))) from first_error
+            return True
 
-        def _via_context():
-            kwargs = {"stock_code": stock_code, "period": period, "start_time": start_time, "end_time": end_time}
+        function = getattr(self.context_info, func_name, None)
+        if callable(function):
+            key = "stock_code" if func_name == "download_history_data" else "stock_list"
+            kwargs = {key: args[0], "period": args[1], "start_time": args[2], "end_time": args[3]}
             if incrementally is not None:
                 kwargs["incrementally"] = incrementally
-            return self.native.call("download_history_data", **kwargs)
+            return self._download_accepted(function(**kwargs), func_name)
+        raise RuntimeError("%s: no download channel on this terminal" % func_name)
 
-        sdk_kwargs = {"incrementally": incrementally} if incrementally is not None else {}
+    def download_history_data(self, stock_code, period, start_time="", end_time="", incrementally=None):
         return self._download(
-            "download_history_data", (stock_code, period, start_time, end_time), sdk_kwargs, _via_context
+            "download_history_data", str(stock_code or ""), period, start_time, end_time, incrementally
         )
 
     def download_history_data2(self, stock_list, period, start_time="", end_time="", incrementally=None):
-        stock_list = _as_list(stock_list)
-
-        def _via_context():
-            kwargs = {"stock_list": stock_list, "period": period, "start_time": start_time, "end_time": end_time}
-            if incrementally is not None:
-                kwargs["incrementally"] = incrementally
-            return self.native.call("download_history_data2", **kwargs)
-
-        sdk_kwargs = {"incrementally": incrementally} if incrementally is not None else {}
         return self._download(
-            "download_history_data2", (stock_list, period, start_time, end_time), sdk_kwargs, _via_context
+            "download_history_data2", _as_list(stock_list), period, start_time, end_time, incrementally
         )

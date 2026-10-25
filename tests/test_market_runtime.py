@@ -96,8 +96,8 @@ def test_native_download_does_not_queue_behind_a_large_market_read(method):
         assert release.wait(2)
         return {}
 
-    def download(*args):
-        calls.append((threading.get_ident(), args))
+    def download(stock, period, start, end):
+        calls.append((threading.get_ident(), (stock, period, start, end)))
 
     transport = QueuedTransport()
     context = SimpleNamespace(run_time=Mock(), get_market_data_ex=market)

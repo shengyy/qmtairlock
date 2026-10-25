@@ -79,8 +79,6 @@ class RpcService:
         if method in LISTENER_DEFERRED_METHODS:
             return False
         if method in {
-            "download_history_data",
-            "download_history_data2",
             "get_financial_data",
             "download_financial_data",
             "download_financial_data2",

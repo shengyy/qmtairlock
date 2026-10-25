@@ -28,6 +28,8 @@ Account reads, credit contract queries and writes execute on the strategy callba
 
 Dividend queries use the callback thread for a single date, one supplied endpoint or no dates. Only two nonempty, distinct endpoints use the heavy worker for range expansion.
 
+Native `download_history_data` and `download_history_data2` calls run on the callback thread. Historical bar reads use the heavy worker; they cannot queue ahead of a native download.
+
 ## Windows and WSL clients
 
 Windows clients select the local channel using the configured account id and the same `pipe_name` on both ends.

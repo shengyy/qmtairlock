@@ -6,6 +6,7 @@
 
 - Keep single-date dividend queries on the callback thread so queued history reads cannot delay them; only date ranges use the heavy worker.
 - Keep native history downloads on the callback thread so large market reads cannot queue ahead of a small download.
+- Restore native history download channels: single-stock globals, batch callback signatures and ContextInfo methods; reject every failed native result, including failures before a later successful stock.
 - Propagate native position-statistics query errors instead of returning an empty result.
 
 ## [0.1.1] - 2026-10-25

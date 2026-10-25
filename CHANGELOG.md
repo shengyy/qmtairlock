@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep single-date dividend queries on the callback thread so queued history reads cannot delay them; only date ranges use the heavy worker.
+- Propagate native position-statistics query errors instead of returning an empty result.
+
 ## [0.1.1] - 2026-10-25
 
 ### Changed

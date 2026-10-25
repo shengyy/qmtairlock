@@ -26,6 +26,8 @@ The host graph includes the server listener, shared message I/O and native domai
 
 Account reads, credit contract queries and writes execute on the strategy callback thread. One worker handles expensive market/formula reads. `gil_switch_interval_seconds` defaults to 0.001; this changes Python scheduling, not native calls that hold the GIL. A stalled native function can still stall QMT. `max_requests_per_tick` defaults to 64 and `drain_budget_seconds` to 0.05; these bound queue draining, not a native call already running.
 
+Dividend queries use the callback thread for a single date, one supplied endpoint or no dates. Only two nonempty, distinct endpoints use the heavy worker for range expansion.
+
 ## Windows and WSL clients
 
 Windows clients select the local channel using the configured account id and the same `pipe_name` on both ends.

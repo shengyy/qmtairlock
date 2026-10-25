@@ -170,6 +170,45 @@ def test_account_exception_stays_an_rpc_error_and_valid_asset_can_be_converted()
     assert trader.query_stock_asset("TEST").cash == 10
 
 
+@pytest.mark.parametrize(
+    "method",
+    [
+        "query_account_infos",
+        "query_stock_positions",
+        "query_position_statistics",
+        "query_stock_orders",
+        "query_stock_trades",
+        "query_execution_snapshot",
+    ],
+)
+def test_native_account_query_failure_is_never_an_empty_result(method):
+    owner, _ = handlers(native=Mock(side_effect=RuntimeError("counter unavailable")))
+    reply = RpcService(owner, "TEST", Mock()).process_request(
+        {"request_id": method, "account_id": "TEST", "method": method}
+    )
+    assert reply["ok"] is False and reply["data"] is None
+    assert "counter unavailable" in reply["error"]
+
+
+@pytest.mark.parametrize("field", ["m_nVolume", "m_nCanUseVolume", "m_nYesterdayVolume"])
+def test_missing_position_quantity_fails_but_native_zero_is_kept(field):
+    row = SimpleNamespace(
+        m_strInstrumentID="600000",
+        m_strExchangeID="SH",
+        m_nVolume=0,
+        m_nCanUseVolume=0,
+        m_nYesterdayVolume=0,
+    )
+    owner, _ = handlers(native=Mock(return_value=[row]))
+    position = owner.handle("query_stock_positions", {})[0]
+    assert (position.volume, position.available, position.yesterday_volume) == (0, 0, 0)
+    delattr(row, field)
+    reply = RpcService(owner, "TEST", Mock()).process_request(
+        {"request_id": "missing", "account_id": "TEST", "method": "query_stock_positions"}
+    )
+    assert reply["ok"] is False and field in reply["error"]
+
+
 def test_native_write_failure_is_unknown_and_never_resent():
     transport = NamedPipeClient("TEST")
     transport._client_connection = Mock(return_value=ClientConnection(Mock(), 42))

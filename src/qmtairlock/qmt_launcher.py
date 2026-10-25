@@ -6,6 +6,8 @@ Readiness is checked with the configured account's named-pipe ping. This module
 runs outside QMT's embedded strategy and never opens a network connection.
 """
 
+import inspect
+import math
 import os
 import subprocess
 import sys
@@ -252,6 +254,35 @@ def _spawn(command, cwd=None, shell=False):
     return subprocess.Popen(command, **kwargs)
 
 
+def _validate_start(install_dir, options):
+    """Validate the full launch request before changing terminal processes."""
+    if options["wait_ready"] and not str(options["account_id"] or "").strip():
+        raise QmtLauncherError("account_id is required when wait_ready=True")
+    timeout = float(options["ready_timeout_seconds"])
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise QmtLauncherError("ready_timeout_seconds must be finite and positive")
+    bin_dir = resolve_install_dir(install_dir)
+    if not os.path.isdir(bin_dir):
+        raise QmtLauncherError("no such directory: %s" % bin_dir)
+    mode = str(options["mode"] or "auto").lower()
+    if mode == "auto":
+        mode = "bat" if options["bat_path"] else "exe"
+    if mode == "bat":
+        if not options["bat_path"] or not os.path.isfile(options["bat_path"]):
+            raise QmtLauncherError("bat_path must name an existing file")
+    elif mode in ("exe", "login", "linkmini"):
+        executable = "XtMiniQmt.exe" if mode == "linkmini" else (options["exe_name"] or "XtItClient.exe")
+        if not os.path.isfile(os.path.join(bin_dir, str(executable))):
+            raise QmtLauncherError("QMT executable not found")
+        if mode == "login":
+            credentials = options["credentials"] or {}
+            if not (credentials.get("user") or credentials.get("account")) or not credentials.get("password"):
+                raise QmtLauncherError("mode='login' requires user and password")
+    else:
+        raise QmtLauncherError("unknown launch mode: %s" % mode)
+    return bin_dir, mode
+
+
 def open_qmt(
     install_dir,
     mode="auto",
@@ -272,28 +303,14 @@ def open_qmt(
       ``"exe"``      -- start ``exe_name`` (default XtItClient.exe) as-is; use
                         when the terminal restores its own session.
       ``"login"``    -- start the exe, then type credentials into the dialog.
-      ``"auto"``     -- bat if given, else linkmini if XtMiniQmt.exe exists,
-                        else exe.
+      ``"auto"``     -- bat if given, else the full terminal executable.
 
     ``credentials`` (mode="login") is ``{"user": ..., "password": ...}``. Pass
     it from your local config or environment; never hardcode it, and note the
     values are typed into a window, so anything that can read that window can
     read them.
     """
-    if wait_ready and not str(account_id or "").strip():
-        raise QmtLauncherError("account_id is required when wait_ready=True")
-    bin_dir = resolve_install_dir(install_dir)
-    if not os.path.isdir(bin_dir):
-        raise QmtLauncherError("no such directory: %s" % bin_dir)
-
-    mode = str(mode or "auto").lower()
-    if mode == "auto":
-        if bat_path:
-            mode = "bat"
-        elif os.path.isfile(os.path.join(bin_dir, "XtMiniQmt.exe")):
-            mode = "linkmini"
-        else:
-            mode = "exe"
+    bin_dir, mode = _validate_start(install_dir, locals())
 
     if mode == "bat":
         if not bat_path or not os.path.isfile(bat_path):
@@ -582,7 +599,9 @@ def _login_via_window(credentials, window_title_prefix=None, appear_timeout_seco
 
 def restart_qmt(install_dir, settle_seconds=5.0, **open_kwargs):
     """Close QMT, allow process cleanup, then start and wait for the main window."""
-    mode = str(open_kwargs.get("mode") or "auto")
+    bound = inspect.signature(open_qmt).bind(install_dir, **open_kwargs)
+    bound.apply_defaults()
+    _, mode = _validate_start(install_dir, bound.arguments)
     if mode in ("login", "auto") and session_is_locked():
         raise QmtLauncherError(
             "interactive session is locked; the login dialog cannot be automated "

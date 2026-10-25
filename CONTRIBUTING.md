@@ -1,6 +1,6 @@
 # Contributing
 
-Use Python 3.10+ and `uv`. The lockfile owns development dependencies. The embedded strategy is additionally checked against Python 3.6 syntax and must stay within the host import boundary.
+Use Python 3.11+ and `uv` for development. The installed client supports Python 3.10+. The lockfile owns development dependencies. The embedded strategy is additionally checked against Python 3.6 syntax and must stay within the host import boundary.
 
 ## Local validation
 

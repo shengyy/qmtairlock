@@ -11,7 +11,7 @@ from .order_watch import OrderWatchTable
 from .rpc_dispatch import BigQmtRpcHandlers
 from .rpc_market_handlers import MarketHandlers
 from .rpc_service import RpcService
-from .transports.pipe_transport import NamedPipeTransport
+from .transports.pipe_server import NamedPipeServer
 
 
 class StrategyRuntime:
@@ -63,7 +63,7 @@ class StrategyRuntime:
         # Callback objects may omit the account type. In that case use native
         # ORDER reads rather than mixing ledgers in a multi-type configuration.
         self.watch = OrderWatchTable() if len(self.handlers.binding.account_types) == 1 else None
-        transport = transport or NamedPipeTransport(account_id=self.account_id, **dict(config.get("pipe") or {}))
+        transport = transport or NamedPipeServer(account_id=self.account_id, **dict(config.get("pipe") or {}))
         self.service = RpcService(
             self.handlers,
             self.account_id,

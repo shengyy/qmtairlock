@@ -10,7 +10,14 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN_IMPORTS = {"socket", "redis", "zmq", "pandas", "pyarrow", "subprocess", "xtquant"}
+FORBIDDEN_IMPORTS = {"socket", "redis", "zmq", "pandas", "pyarrow", "subprocess", "xtquant", "pathlib"}
+
+
+def client_side_module(name):
+    return any(
+        part.startswith("client") or "_client" in part or "relay" in part or "launcher" in part
+        for part in name.split(".")
+    )
 
 
 def module_path(name):
@@ -25,6 +32,8 @@ def collect_sources():
         name = pending.pop()
         if name in sources:
             continue
+        if client_side_module(name):
+            raise ValueError("client-side module in host graph: " + name)
         path = module_path(name)
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, feature_version=(3, 6))

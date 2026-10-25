@@ -10,7 +10,7 @@ Requests are UTF-8 JSON objects:
 
 Replies repeat `request_id` and `account_id`, with `ok`, `data` or `error`. Clients reject mismatched identities. Typed payload metadata preserves frames, arrays and native object fields. Missing position quantities are errors; valid native zero quantities remain zero. Broker order identifiers stay strings, including leading zeros. `OrderId` additionally supports integer-style client APIs while carrying the exact string in `order_sys_id`.
 
-The native pipe uses Windows message mode: one JSON message per `WriteFile`. The WSL relay wraps each message in a four-byte unsigned big-endian length followed by the payload (maximum 256 MiB). Its first frame is a JSON handshake containing `pipe_path` and `connect_timeout_seconds`; an empty frame acknowledges a successful connection. Truncated frames never become native messages.
+The local channel exchanges one complete JSON request or response per message. The WSL relay wraps each message in a four-byte unsigned big-endian length followed by the payload (maximum 256 MiB). Its first frame is a JSON handshake containing `pipe_path` and `connect_timeout_seconds`; an empty frame acknowledges a successful connection. Truncated frames never become native messages.
 
 ## Methods and domain clients
 

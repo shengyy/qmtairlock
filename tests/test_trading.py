@@ -15,8 +15,7 @@ from qmtairlock.rpc_service import RpcService
 from qmtairlock.rpc_settlement import PendingSettlement, SettlementManager
 from qmtairlock.trader_client import BigQmtXtTrader
 from qmtairlock.transports.base import TransportError
-from qmtairlock.transports.pipe_client import ClientConnection
-from qmtairlock.transports.pipe_transport import NamedPipeTransport
+from qmtairlock.transports.pipe_client import ClientConnection, NamedPipeClient
 
 
 def handlers(kind="STOCK", native=None):
@@ -172,26 +171,26 @@ def test_account_exception_stays_an_rpc_error_and_valid_asset_can_be_converted()
 
 
 def test_native_write_failure_is_unknown_and_never_resent():
-    transport = NamedPipeTransport("TEST")
+    transport = NamedPipeClient("TEST")
     transport._client_connection = Mock(return_value=ClientConnection(Mock(), 42))
-    transport._write = Mock(side_effect=TransportError("already delivered, completion unknown"))
+    transport._wire.write = Mock(side_effect=TransportError("already delivered, completion unknown"))
     transport._drop_client_handle = Mock()
     with pytest.raises(TransportError):
         transport.send_request({"request_id": "x"}, 1)
-    transport._write.assert_called_once()
+    transport._wire.write.assert_called_once()
 
 
 def test_native_short_write_is_rejected():
-    transport = NamedPipeTransport("TEST")
-    transport._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
+    transport = NamedPipeClient("TEST")
+    transport._wire._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
 
     def short(handle, payload, length, written, overlap):
         written._obj.value = length - 1
         return True
 
-    transport._dll = lambda: SimpleNamespace(WriteFile=short)
+    transport._wire.dll = lambda: SimpleNamespace(WriteFile=short)
     with pytest.raises(TransportError, match="short pipe write"):
-        transport._write(42, b"{}")
+        transport._wire.write(42, b"{}")
 
 
 def test_batch_identity_cannot_silently_accept_a_different_order():

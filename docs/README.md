@@ -18,8 +18,8 @@
 | Directory | Only holds |
 |---|---|
 | `src/qmtairlock/` | Importable domain, client, host and transport implementations |
-| `scripts/` | Strategy builder, source/sandbox gates and local benchmarks |
-| `tests/` | Isolated contract, concurrency, native-pipe and sandbox tests |
+| `scripts/` | Strategy builder, source/runtime boundary gates and local benchmarks |
+| `tests/` | Isolated contract, concurrency, local IPC and runtime boundary tests |
 | `docs/` | Current architecture, contracts, operations and verification facts |
 | `.github/` | Manual CI and contribution templates |
 | `dist/` | Ignored local build output |

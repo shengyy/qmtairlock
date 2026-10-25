@@ -1,4 +1,4 @@
-"""Explicit client configuration; no implicit private-file imports."""
+"""Explicit client channel, timeout and local cache configuration."""
 
 import math
 

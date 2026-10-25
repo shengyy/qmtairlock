@@ -10,10 +10,9 @@ class TransportTimeout(TransportError, TimeoutError):
 
 
 class RpcTransport(object):
-    """Abstract request/response transport. Concrete implementations own the wire.
+    """Common lifecycle and request/response contract.
 
-    Subclasses MUST override :meth:`send_request`,
-    :meth:`start_receiving`, :meth:`send_response`, and :meth:`stop`.
+    Concrete client and server roles implement the operations they expose.
     """
 
     name = "abstract"

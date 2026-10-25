@@ -1,17 +1,27 @@
 # qmtairlock
 
-面向 Windows 大 QMT 策略宿主的命名管道桥，提供行情、账户查询和交易 Python 客户端。
+面向 QMT 个人研究与实验的本地进程间通信桥及 Python 客户端，采用非商用项目定位。
 
 [English](README.md) · [产品边界](PRODUCT.md) · [文档地图](docs/README.md) · [验证状态](docs/status.md)
 
-策略通过 `ContextInfo` 和宿主注入函数调用 QMT。构建产物是一份 GBK Python 文件，只使用标准库与命名管道，不主动读写文件或创建 Socket。Windows 客户端直接连接；WSL 客户端通过 Windows Python 进程的 stdio 帧中继连接。
+> **仅供个人研究与实验 — 非商用用途声明**
+>
+> 本项目用于个人量化策略研发、软件架构学习与本地实验测试。请勿用于任何商业用途；维护者不提供商业服务或支持。
+>
+> 禁止将本项目用于代客理财、非法证券期货经营、分仓配资、多账户中台或向不可信网络暴露远程接入接口。使用者必须遵守适用法律法规、[《证券公司交易信息系统接入管理规范（试行）》](https://www.amac.org.cn/xwfb/tzgg/202608/t20260828_28053.html)以及所在证券公司的终端使用协议、接入权限与风控要求。
+>
+> 本项目不构成投资建议或交易信号。软件按 **“原样（AS IS）”** 提供，不提供任何明示或暗示担保。运行故障、数据偏差、委托异常、账户风险及直接或间接损失由使用者自行承担；在适用法律允许的最大范围内，作者不承担由此产生的法律或经济责任。
+>
+> 本项目为独立技术实验代码，与迅投（XtQuant / QMT）及任何证券公司均无关联，亦未获其官方背书。本段为维护者的用途声明，软件授权条款见 [LICENSE](LICENSE)。
+
+策略采用自包含的标准库实现、纯内存运行态和零外部中间件依赖，通过 QMT 原生 API 与同机消息通道提供能力。Windows 客户端本地连接；WSL 客户端使用 Windows Python stdio 中继。生成的 GBK 入口为 `QMTAIRLOCK.py`。
 
 ## 安装与读取
 
 客户端需要 Python 3.10 及以上。需要 pandas 和 Parquet 缓存时安装 `data` extra：
 
 ```sh
-python -m pip install 'qmtairlock[data] @ git+https://github.com/shengyy/qmtairlock.git@v0.1.0'
+python -m pip install 'qmtairlock[data] @ git+https://github.com/shengyy/qmtairlock.git@v0.1.1'
 ```
 
 在同一 Windows 机器上配置并启动策略后：

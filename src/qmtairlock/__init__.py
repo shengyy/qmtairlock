@@ -1,1 +1,1 @@
-"""QMT stock RPC. Import clients from their owning modules."""
+"""QMT market data, account, execution, credit, options and formula RPC clients and host runtime."""

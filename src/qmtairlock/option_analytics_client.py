@@ -1,16 +1,14 @@
-"""Client-side option metadata, market-price, and chain analytics orchestration.
+"""Client option metadata, market-price selection, and single/chain analytics.
 
-The numerical Black-Scholes-Merton implementation lives in
-``option_analytics``.  This module owns the higher-level ``BigQmtXtData``
-workflow so the already-large compatibility layer only exposes thin public
-delegates.  It is client-only: QMT strategy/runtime modules do not import it.
+Numerical BSM calculations live in option_analytics. OptionsClient owns data
+coordination, unit conversion, input selection and analysis result metadata.
 """
 
 import datetime as _dt
 import math
 
 from .logging_setup import get_logger
-from .option_analytics import calculate_option_analytics, normalize_option_type
+from .option_analytics import black_scholes_price, calculate_option_analytics, implied_volatility, normalize_option_type
 
 log = get_logger("option_analytics_client")
 
@@ -416,223 +414,243 @@ def _option_detail(data_client, stock_code):
     return data_client.get_option_detail_data(stock_code)
 
 
-def get_option_analytics(
-    data_client,
-    opt_code,
-    option_price=None,
-    underlying_price=None,
-    as_of=None,
-    risk_free_rate=None,
-    dividend_yield=None,
-    price_period="1m",
-    include_native_iv=False,
-):
-    """Return local IV and standard Greeks for one option contract."""
-    code = str(opt_code or "").strip().upper()
-    if not code:
-        raise ValueError("opt_code is required")
-    detail = _option_detail(data_client, code)
-    if not isinstance(detail, dict) or not detail:
-        raise ValueError("no option detail for %s" % code)
-    underlying_code = _option_underlying_code(detail)
+class OptionsClient:
+    """Coordinate native option inputs and local analysis for a data client."""
 
-    needed_codes = []
-    if option_price is None:
-        needed_codes.append(code)
-    if underlying_price is None:
-        needed_codes.append(underlying_code)
-    prices, sources = _resolve_market_prices(data_client, needed_codes, price_period=price_period)
-    if option_price is None:
-        option_price = prices.get(code)
-        if option_price is None:
-            raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (code, price_period))
-        option_source = sources.get(code, "unknown")
-    else:
-        option_source = "argument"
-    if underlying_price is None:
-        underlying_price = prices.get(underlying_code)
-        if underlying_price is None:
-            raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (underlying_code, price_period))
-        underlying_source = sources.get(underlying_code, "unknown")
-    else:
-        underlying_source = "argument"
-    if dividend_yield is None:
-        dividend_yield = 0.0
-        dividend_source = "default_zero"
-    else:
-        dividend_source = "argument"
+    def __init__(self, data):
+        self.data = data
 
-    result = _analytics_from_detail(
-        code,
-        detail,
-        option_price,
-        underlying_price,
-        as_of=as_of,
-        risk_free_rate=risk_free_rate,
-        dividend_yield=dividend_yield,
-        price_period=price_period,
-        option_price_source=option_source,
-        underlying_price_source=underlying_source,
-        dividend_yield_source=dividend_source,
-    )
-    if include_native_iv:
-        try:
-            result["native_iv"] = data_client.get_option_iv(code)
-        except Exception as exc:
-            result["native_iv"] = None
-            result["native_iv_error"] = str(exc)
-    return result
-
-
-def get_option_chain_analytics(
-    data_client,
-    undl_code,
-    dedate,
-    opttype="",
-    isavailavle=False,
-    underlying_price=None,
-    as_of=None,
-    risk_free_rate=None,
-    dividend_yield=None,
-    price_period="1m",
-):
-    """Calculate a whole expiry's IV/Greeks with batched market reads."""
-    codes = list(data_client.get_option_list(undl_code, dedate, opttype=opttype, isavailavle=isavailavle) or [])
-    details = {}
-    detail_errors = {}
-    for raw_code in codes:
-        code = str(raw_code).strip().upper()
-        try:
-            detail = _option_detail(data_client, code)
-            if not isinstance(detail, dict) or not detail:
-                raise ValueError("empty option detail")
-            details[code] = detail
-        except Exception as exc:
-            detail_errors[code] = str(exc)
-
-    underlying_code = str(undl_code or "").strip().upper()
-    if details:
-        underlying_code = _option_underlying_code(next(iter(details.values())))
-    price_codes = list(details.keys())
-    if underlying_price is None and underlying_code:
-        price_codes.append(underlying_code)
-    prices, sources = _resolve_market_prices(data_client, price_codes, price_period=price_period)
-    if underlying_price is None:
-        underlying_price = prices.get(underlying_code)
-        underlying_source = sources.get(underlying_code, "unknown")
-    else:
-        underlying_source = "argument"
-
-    parity_pair_count = 0
-    parity_yields_by_strike = {}
-    if dividend_yield is None:
-        dividend_yield, parity_pair_count, parity_yields_by_strike = _infer_chain_dividend_yield(
-            details,
-            prices,
-            underlying_price,
-            as_of=as_of,
-            risk_free_rate=risk_free_rate,
+    def bsm_price(self, opt_type, target_price, strike_price, risk_free, sigma, days, dividend=0):
+        return black_scholes_price(
+            opt_type, target_price, strike_price, float(days) / 365.0, risk_free, sigma, dividend
         )
+
+    def bsm_iv(self, opt_type, target_price, strike_price, option_price, risk_free, days, dividend=0):
+        return implied_volatility(
+            opt_type, target_price, strike_price, option_price, float(days) / 365.0, risk_free, dividend
+        )
+
+    def get_option_analytics(
+        self,
+        opt_code,
+        option_price=None,
+        underlying_price=None,
+        as_of=None,
+        risk_free_rate=None,
+        dividend_yield=None,
+        price_period="1m",
+        include_native_iv=False,
+    ):
+        """Return local IV and standard Greeks for one option contract."""
+        code = str(opt_code or "").strip().upper()
+        if not code:
+            raise ValueError("opt_code is required")
+        detail = _option_detail(self.data, code)
+        if not isinstance(detail, dict) or not detail:
+            raise ValueError("no option detail for %s" % code)
+        underlying_code = _option_underlying_code(detail)
+
+        needed_codes = []
+        if option_price is None:
+            needed_codes.append(code)
+        if underlying_price is None:
+            needed_codes.append(underlying_code)
+        prices, sources = _resolve_market_prices(self.data, needed_codes, price_period=price_period)
+        if option_price is None:
+            option_price = prices.get(code)
+            if option_price is None:
+                raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (code, price_period))
+            option_source = sources.get(code, "unknown")
+        else:
+            option_source = "argument"
+        if underlying_price is None:
+            underlying_price = prices.get(underlying_code)
+            if underlying_price is None:
+                raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (underlying_code, price_period))
+            underlying_source = sources.get(underlying_code, "unknown")
+        else:
+            underlying_source = "argument"
         if dividend_yield is None:
             dividend_yield = 0.0
             dividend_source = "default_zero"
         else:
-            dividend_source = "put_call_parity_median"
-    else:
-        dividend_source = "argument"
+            dividend_source = "argument"
 
-    contracts = []
-    for raw_code in codes:
-        code = str(raw_code).strip().upper()
-        if code in detail_errors:
-            contracts.append(
-                {
-                    "option_code": code,
-                    "analytics_error": detail_errors[code],
-                }
-            )
-            continue
-        detail = details[code]
-        option_price = prices.get(code)
-        option_source = sources.get(code, "unknown")
-        base = {
-            "option_code": code,
-            "underlying_code": underlying_code,
-            "option_price": option_price,
-            "option_price_source": option_source,
-            "underlying_price_source": underlying_source,
-            "dividend_yield": dividend_yield,
-            "dividend_yield_source": dividend_source,
-            "option_type": _detail_value(detail, "optType", "OptType", "option_type"),
-            "strike_price": _detail_value(detail, "OptExercisePrice", "exercise_price", "strike_price"),
-            "expiry_date": str(_detail_value(detail, "ExpireDate", "EndDelivDate", "expire_date", "expiry_date") or ""),
-        }
-        item = None
-        try:
-            if underlying_price is None:
-                raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (underlying_code, price_period))
-            if option_price is None:
-                raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (code, price_period))
-            item = _analytics_from_detail(
-                code,
-                detail,
-                option_price,
+        result = _analytics_from_detail(
+            code,
+            detail,
+            option_price,
+            underlying_price,
+            as_of=as_of,
+            risk_free_rate=risk_free_rate,
+            dividend_yield=dividend_yield,
+            price_period=price_period,
+            option_price_source=option_source,
+            underlying_price_source=underlying_source,
+            dividend_yield_source=dividend_source,
+        )
+        if include_native_iv:
+            try:
+                result["native_iv"] = self.data.get_option_iv(code)
+            except Exception as exc:
+                result["native_iv"] = None
+                result["native_iv_error"] = str(exc)
+        return result
+
+    def get_option_chain_analytics(
+        self,
+        undl_code,
+        dedate,
+        opttype="",
+        isavailavle=False,
+        underlying_price=None,
+        as_of=None,
+        risk_free_rate=None,
+        dividend_yield=None,
+        price_period="1m",
+    ):
+        """Calculate a whole expiry's IV/Greeks with batched market reads."""
+        codes = list(self.data.get_option_list(undl_code, dedate, opttype=opttype, isavailavle=isavailavle) or [])
+        details = {}
+        detail_errors = {}
+        for raw_code in codes:
+            code = str(raw_code).strip().upper()
+            try:
+                detail = _option_detail(self.data, code)
+                if not isinstance(detail, dict) or not detail:
+                    raise ValueError("empty option detail")
+                details[code] = detail
+            except Exception as exc:
+                detail_errors[code] = str(exc)
+
+        underlying_code = str(undl_code or "").strip().upper()
+        if details:
+            underlying_code = _option_underlying_code(next(iter(details.values())))
+        price_codes = list(details.keys())
+        if underlying_price is None and underlying_code:
+            price_codes.append(underlying_code)
+        prices, sources = _resolve_market_prices(self.data, price_codes, price_period=price_period)
+        if underlying_price is None:
+            underlying_price = prices.get(underlying_code)
+            underlying_source = sources.get(underlying_code, "unknown")
+        else:
+            underlying_source = "argument"
+
+        parity_pair_count = 0
+        parity_yields_by_strike = {}
+        if dividend_yield is None:
+            dividend_yield, parity_pair_count, parity_yields_by_strike = _infer_chain_dividend_yield(
+                details,
+                prices,
                 underlying_price,
                 as_of=as_of,
                 risk_free_rate=risk_free_rate,
-                dividend_yield=dividend_yield,
-                price_period=price_period,
-                option_price_source=option_source,
-                underlying_price_source=underlying_source,
-                dividend_yield_source=dividend_source,
             )
-        except Exception as exc:
-            if dividend_source == "put_call_parity_median" and "no-arbitrage bounds" in str(exc):
-                expiry_text = (
-                    str(_detail_value(detail, "ExpireDate", "EndDelivDate", "expire_date", "expiry_date") or "")
-                    .strip()
-                    .replace("-", "")[:8]
+            if dividend_yield is None:
+                dividend_yield = 0.0
+                dividend_source = "default_zero"
+            else:
+                dividend_source = "put_call_parity_median"
+        else:
+            dividend_source = "argument"
+
+        contracts = []
+        for raw_code in codes:
+            code = str(raw_code).strip().upper()
+            if code in detail_errors:
+                contracts.append(
+                    {
+                        "option_code": code,
+                        "analytics_error": detail_errors[code],
+                    }
                 )
-                strike = _positive_number(_detail_value(detail, "OptExercisePrice", "exercise_price", "strike_price"))
-                strike_yield = parity_yields_by_strike.get((expiry_text, strike))
-                if strike_yield is not None:
-                    try:
-                        item = _analytics_from_detail(
-                            code,
-                            detail,
-                            option_price,
-                            underlying_price,
-                            as_of=as_of,
-                            risk_free_rate=risk_free_rate,
-                            dividend_yield=strike_yield,
-                            price_period=price_period,
-                            option_price_source=option_source,
-                            underlying_price_source=underlying_source,
-                            dividend_yield_source="put_call_parity_strike",
-                        )
-                    except Exception as retry_exc:
-                        exc = retry_exc
-            if item is None:
-                base["analytics_error"] = str(exc)
-                item = base
-        contracts.append(item)
+                continue
+            detail = details[code]
+            option_price = prices.get(code)
+            option_source = sources.get(code, "unknown")
+            base = {
+                "option_code": code,
+                "underlying_code": underlying_code,
+                "option_price": option_price,
+                "option_price_source": option_source,
+                "underlying_price_source": underlying_source,
+                "dividend_yield": dividend_yield,
+                "dividend_yield_source": dividend_source,
+                "option_type": _detail_value(detail, "optType", "OptType", "option_type"),
+                "strike_price": _detail_value(detail, "OptExercisePrice", "exercise_price", "strike_price"),
+                "expiry_date": str(
+                    _detail_value(detail, "ExpireDate", "EndDelivDate", "expire_date", "expiry_date") or ""
+                ),
+            }
+            item = None
+            try:
+                if underlying_price is None:
+                    raise ValueError(
+                        "no usable market price for %s (tried %s, tick, 1d)" % (underlying_code, price_period)
+                    )
+                if option_price is None:
+                    raise ValueError("no usable market price for %s (tried %s, tick, 1d)" % (code, price_period))
+                item = _analytics_from_detail(
+                    code,
+                    detail,
+                    option_price,
+                    underlying_price,
+                    as_of=as_of,
+                    risk_free_rate=risk_free_rate,
+                    dividend_yield=dividend_yield,
+                    price_period=price_period,
+                    option_price_source=option_source,
+                    underlying_price_source=underlying_source,
+                    dividend_yield_source=dividend_source,
+                )
+            except Exception as exc:
+                if dividend_source == "put_call_parity_median" and "no-arbitrage bounds" in str(exc):
+                    expiry_text = (
+                        str(_detail_value(detail, "ExpireDate", "EndDelivDate", "expire_date", "expiry_date") or "")
+                        .strip()
+                        .replace("-", "")[:8]
+                    )
+                    strike = _positive_number(
+                        _detail_value(detail, "OptExercisePrice", "exercise_price", "strike_price")
+                    )
+                    strike_yield = parity_yields_by_strike.get((expiry_text, strike))
+                    if strike_yield is not None:
+                        try:
+                            item = _analytics_from_detail(
+                                code,
+                                detail,
+                                option_price,
+                                underlying_price,
+                                as_of=as_of,
+                                risk_free_rate=risk_free_rate,
+                                dividend_yield=strike_yield,
+                                price_period=price_period,
+                                option_price_source=option_source,
+                                underlying_price_source=underlying_source,
+                                dividend_yield_source="put_call_parity_strike",
+                            )
+                        except Exception as retry_exc:
+                            exc = retry_exc
+                if item is None:
+                    base["analytics_error"] = str(exc)
+                    item = base
+            contracts.append(item)
 
-    valid_count = sum(1 for item in contracts if "analytics_error" not in item)
-    return {
-        "underlying_code": underlying_code,
-        "underlying_price": underlying_price,
-        "underlying_price_source": underlying_source,
-        "dividend_yield": dividend_yield,
-        "dividend_yield_source": dividend_source,
-        "dividend_yield_pair_count": parity_pair_count,
-        "dedate": str(dedate),
-        "as_of": _option_as_of(as_of).strftime("%Y-%m-%d %H:%M:%S"),
-        "price_period": str(price_period),
-        "count": len(contracts),
-        "valid_count": valid_count,
-        "error_count": len(contracts) - valid_count,
-        "contracts": contracts,
-    }
+        valid_count = sum(1 for item in contracts if "analytics_error" not in item)
+        return {
+            "underlying_code": underlying_code,
+            "underlying_price": underlying_price,
+            "underlying_price_source": underlying_source,
+            "dividend_yield": dividend_yield,
+            "dividend_yield_source": dividend_source,
+            "dividend_yield_pair_count": parity_pair_count,
+            "dedate": str(dedate),
+            "as_of": _option_as_of(as_of).strftime("%Y-%m-%d %H:%M:%S"),
+            "price_period": str(price_period),
+            "count": len(contracts),
+            "valid_count": valid_count,
+            "error_count": len(contracts) - valid_count,
+            "contracts": contracts,
+        }
 
-
-__all__ = ["get_option_analytics", "get_option_chain_analytics"]
+    __all__ = ["get_option_analytics", "get_option_chain_analytics"]

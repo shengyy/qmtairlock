@@ -1,4 +1,4 @@
-"""证券代码标准化和委托数量处理。"""
+"""Normalize instrument identifiers and order quantities."""
 
 import re
 
@@ -9,7 +9,7 @@ _DIGIT_CODE_RE = re.compile(r"^\d{6}$")
 # Stock markets are what get_markets() reports, so they stay their own set.
 # Futures exchanges are listed separately because a futures exchange carries
 # only futures: the token already says what kind of instrument it holds, so
-# nothing has to be narrowed or asked of the caller there ().
+# the token itself identifies the instrument family.
 STOCK_MARKET_CODES = frozenset({"SH", "SZ", "BJ", "HK"})
 OPTION_MARKET_CODES = frozenset({"SHO", "SZO"})
 FUTURES_MARKET_CODES = frozenset({"IF", "SF", "DF", "ZF", "INE", "GF"})
@@ -38,10 +38,7 @@ _QMT_SUFFIXES = (
 # string to QMT than "RB2401.SF", while CZCE writes "AP401.ZF" upper. Uppercasing
 # a lowercase futures symbol therefore produces a code QMT does not recognise,
 # which surfaces as an empty quote rather than an error.
-#
-# fixed this for POSITION rows by bypassing this function; every other path
-# -- orders, quotes, the full-tick cache, the risk guard -- still came through
-# here and got uppercased.
+
 _CASE_SENSITIVE_SUFFIXES = frozenset({".SF", ".DF", ".IF", ".ZF", ".INE", ".GF"})
 
 
@@ -97,7 +94,7 @@ def normalize_stock_code(code):
                     # Normalise the suffix, keep the caller's symbol verbatim.
                     return raw[: -len(suffix)] + suffix
                 return text
-    # Original logic for 6-digit stock codes
+    # Normalize six-digit stock codes
     if text.startswith("SH") and _DIGIT_CODE_RE.match(text[2:]):
         return f"{text[2:]}.SH"
     if text.startswith("SZ") and _DIGIT_CODE_RE.match(text[2:]):
@@ -117,11 +114,7 @@ def normalize_stock_code(code):
 
 
 def min_lot(stock_code):
-    """最小申报数量。
-
-    债券论「张」，10 张起 —— 之前一律按 100 算，于是 round_buy_volume 会把
-    一手转债 (10 张) 变成 `(10 // 100) * 100 == 0`，单子直接废掉。
-    """
+    """Return the supported instrument family's minimum order quantity."""
     normalized = normalize_stock_code(stock_code)
     if is_bond_code(normalized):
         return BOND_LOT

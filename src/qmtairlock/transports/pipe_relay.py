@@ -1,10 +1,9 @@
 # coding: utf-8
-"""Windows stdio -> 消息管道中继，只依赖 stdlib + ctypes。
+"""Windows stdio relay for same-host messages using standard-library code.
 
-WSL 打不开 Windows 命名管道；用同机 Windows Python 承接内核句柄，QMT 侧
-仍收到原来的 JSON 消息。首帧是 UTF-8 JSON 握手（pipe_path 和连接期限），
-连接成功回一个空帧；后续帧的 payload 与管道消息一一对应，绝不重发。
-所有帧均为 4 字节大端长度 + payload；stdout 只放帧，诊断只到 stderr。
+Frames carry a four-byte big-endian length and an unchanged JSON payload.
+The initial handshake selects the local channel and connection deadline.
+Stdout is reserved for frames; diagnostics are written to stderr.
 """
 
 import json
@@ -63,7 +62,7 @@ def write_frame(stream, payload):
 
 def relay(read_next, output, transport_factory=None):
     """Forward only complete frames, once each, preserving the native JSON payload."""
-    from .pipe_transport import NamedPipeTransport
+    from .pipe_client import NamedPipeClient
 
     raw = read_next()
     if raw is None:
@@ -75,9 +74,8 @@ def relay(read_next, output, transport_factory=None):
     timeout = float(hello.get("connect_timeout_seconds", 5.0))
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("connect_timeout_seconds must be finite and positive")
-    transport = (transport_factory or NamedPipeTransport)(connect_timeout_seconds=timeout)
+    transport = (transport_factory or NamedPipeClient)(connect_timeout_seconds=timeout)
     transport.path = path
-    transport._running = True  # _read 必须把管道错误报告出来，不能当作 stop 唤醒。
     try:
         # 原生连接器已在期限内重试 PIPE_BUSY / FILE_NOT_FOUND。
         handle = transport._client_handle()
@@ -86,9 +84,9 @@ def relay(read_next, output, transport_factory=None):
             payload = read_next()
             if payload is None:
                 return
-            if transport._write(handle, payload) != len(payload):
+            if transport._wire.write(handle, payload) != len(payload):
                 raise OSError("short pipe message write; outcome unknown")
-            response = transport._read(handle)
+            response = transport._wire.read(handle)
             if not response:
                 raise EOFError("pipe disconnected")
             write_frame(output, response)

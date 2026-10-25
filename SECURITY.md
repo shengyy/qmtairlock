@@ -1,17 +1,19 @@
 # Security
 
-The bridge assumes a trusted Windows user session and a trusted client application on the same machine. It is not a multi-tenant or hostile-local-user boundary.
+The bridge is intended for a trusted Windows user session and a trusted application on the same machine. Deployment permissions and broker access requirements remain the operator's responsibility.
 
-## Access
+## Local access boundary
 
-The server creates message-mode named pipes with `PIPE_REJECT_REMOTE_CLIENTS`. The account id is part of the pipe name and every RPC envelope must match the configured account. Account-type access is limited to the strategy configuration.
+The same-host channel follows the Windows process's default access policy. The configured account and allowed account types are checked for each RPC. Processes permitted by that local access policy may connect; operate QMT and the relay under a controlled user and restrict desktop/server access accordingly.
 
-Pipe access uses the Windows process's default security descriptor; there is no custom per-client ACL, authentication token or encryption layer. Other local processes allowed by that descriptor may connect. Run QMT and the relay under a controlled user and restrict desktop/server access accordingly. Do not forward the pipe or relay to an untrusted network.
+Remote exposure and multi-tenant deployment are outside the supported operating model. The channel provides local message exchange; it does not provide an independent identity or encrypted remote-access service. Keep it inside the trusted machine and follow the terminal provider's access agreement and controls.
 
-Trading methods require `allow_order_methods=True`, which defaults to `False`. The bridge's validation and deduplication do not replace an application's execution intent, position sizing or risk controls. A timeout after dispatch can mean the broker accepted an order: query native facts and do not blindly retry.
+Trading methods require `allow_order_methods=True`, which defaults to `False`. Applications own durable execution intent, position sizing and risk limits. A timeout after dispatch can leave an unknown broker result; reconcile native facts before deciding any further action.
 
 ## Data and reporting
 
-Keep accounts, credentials and local state outside Git. The host logs to its console only. Client Parquet caches contain market data and inherit local filesystem permissions. The optional launcher operates the Windows desktop; deployment-specific login automation and secrets are the operator's responsibility.
+Keep accounts, credentials and local state outside Git. Host diagnostics use the QMT console. Client Parquet caches inherit local filesystem permissions. The optional external launcher operates the Windows desktop; deployment-specific login automation and secrets are the operator's responsibility.
 
-Use GitHub's private vulnerability reporting on this repository when available. If unavailable, open an issue requesting a private contact route without disclosing exploit details, account data or credentials. Ordinary reproducible bugs can use the public bug template with synthetic data.
+Use GitHub's private vulnerability reporting when available. If unavailable, open an issue requesting a private contact route without disclosing exploit details, account data or credentials. Ordinary reproducible bugs can use the public template with synthetic data.
+
+The intended-use and disclaimer statement is in [PRODUCT.md](PRODUCT.md#intended-use-and-disclaimer).

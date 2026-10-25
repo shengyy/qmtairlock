@@ -79,8 +79,6 @@ class RpcService:
         if method in LISTENER_DEFERRED_METHODS:
             return False
         if method in {
-            "download_history_data",
-            "download_history_data2",
             "get_financial_data",
             "download_financial_data",
             "download_financial_data2",
@@ -89,10 +87,11 @@ class RpcService:
             return True
         if method in {"get_formula_result", "call_formula", "gen_factor_index"}:
             return True
-        if method == "get_divid_factors" and (
-            (request.get("params") or {}).get("start_time") or (request.get("params") or {}).get("end_time")
-        ):
-            return True
+        if method == "get_divid_factors":
+            params = request.get("params") or {}
+            start = str(params.get("start_time") or "").strip()
+            end = str(params.get("end_time") or "").strip()
+            return bool(start and end and start != end)
         if method not in {"get_ticks", "get_market_data", "get_market_data_ex", "get_local_data"}:
             return False
         params = request.get("params") or {}

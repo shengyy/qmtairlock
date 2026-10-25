@@ -230,10 +230,7 @@ class BigQmtPositionProvider:
 
     def get_position_statistics(self, account_id):
         query = self._require_query_func()
-        try:
-            rows = query(account_id, self._resolve_account_type(account_id), "POSITION_STATISTICS") or []
-        except Exception:
-            return []
+        rows = query(account_id, self._resolve_account_type(account_id), "POSITION_STATISTICS") or []
         stats = []
         for row in rows:
             try:

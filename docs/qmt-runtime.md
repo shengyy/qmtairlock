@@ -2,7 +2,7 @@
 
 ## Host setup
 
-Build `dist/ASHARE_AGENT.py` using the command in [Contributing](../CONTRIBUTING.md). Copy the generated file into the QMT strategy editor as GBK. The editable configuration region is bounded by `QMT_CONFIG_BEGIN` and `QMT_CONFIG_END`:
+Build `dist/QMTAIRLOCK.py` using the command in [Contributing](../CONTRIBUTING.md). Copy the generated file into the QMT strategy editor as GBK. The editable configuration region is bounded by `QMT_CONFIG_BEGIN` and `QMT_CONFIG_END`:
 
 ```python
 QMT_ACCOUNT_ID = "YOUR_ACCOUNT"

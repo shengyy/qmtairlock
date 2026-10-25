@@ -1,6 +1,6 @@
 # Contributing
 
-Use Python 3.10+ and `uv`. The lockfile owns development dependencies. The embedded strategy is additionally checked against Python 3.6 syntax and must stay within the host import boundary.
+Use Python 3.11+ and `uv` for development. The installed client supports Python 3.10+. The lockfile owns development dependencies. The embedded strategy is additionally checked against Python 3.6 syntax and must stay within the host import boundary.
 
 ## Local validation
 
@@ -16,7 +16,7 @@ uv build
 git diff --check
 ```
 
-Run from the repository root. `dist/` holds generated files and is ignored. Tests must use isolated accounts and native-function doubles; they never submit live orders. Windows-only native pipe tests skip on other platforms. Do not report skipped tests as verified behavior.
+Run from the repository root. The strategy defaults to `dist/QMTAIRLOCK.py`; applications may pass `--output path/CustomStrategy.py`. `dist/` holds generated files and is ignored. Tests must use isolated accounts and native-function doubles; they never submit live orders. Windows-only native pipe tests skip on other platforms. Do not report skipped tests as verified behavior.
 
 The source gate caps Python files in `src/`, `scripts/` and `tests/` at 800 lines. Split by domain responsibility using composition. Do not introduce numbered parts, mixins or forwarding modules to satisfy the count. The generated strategy is exempt from this source limit.
 

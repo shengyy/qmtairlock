@@ -121,11 +121,11 @@ def build(output):
     data = body.encode("gbk", errors="backslashreplace")
     decoded = data.decode("gbk")
     ast.parse(decoded, feature_version=(3, 6))
-    code = compile(decoded, "ASHARE_AGENT.py", "exec")
+    output = Path(output)
+    code = compile(decoded, output.name, "exec")
     for constant in code.co_consts:
         if hasattr(constant, "co_name") and constant.co_name.startswith("_mod_") and constant.co_cellvars:
             raise ValueError("module bindings became closure cells: " + constant.co_name)
-    output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(data)
     manifest = {
@@ -142,7 +142,7 @@ def build(output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "dist/ASHARE_AGENT.py")
+    parser.add_argument("--output", type=Path, default=ROOT / "dist/QMTAIRLOCK.py")
     args = parser.parse_args()
     manifest = build(args.output)
     print("%s: %d modules, sha256 %s" % (args.output, len(manifest["modules"]), manifest["sha256"]))

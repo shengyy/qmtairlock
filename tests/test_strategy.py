@@ -50,9 +50,9 @@ class Context:
 
 
 def test_built_strategy_lifecycle_under_forbidden_io(tmp_path):
-    output = tmp_path / "ASHARE_AGENT.py"
+    output = tmp_path / "QMTAIRLOCK.py"
     manifest = build(output)
-    code = compile(output.read_text(encoding="gbk"), "ASHARE_AGENT.py", "exec")
+    code = compile(output.read_text(encoding="gbk"), "QMTAIRLOCK.py", "exec")
     imports_before = set(sys.modules)
     forbidden = mock.Mock(side_effect=AssertionError("forbidden I/O"))
     namespace = {}
@@ -118,7 +118,7 @@ def test_built_strategy_lifecycle_under_forbidden_io(tmp_path):
 
 
 def test_flat_load_is_local_and_repeatable(tmp_path):
-    output = tmp_path / "ASHARE_AGENT.py"
+    output = tmp_path / "QMTAIRLOCK.py"
     build(output)
     code = compile(output.read_text(encoding="gbk"), str(output), "exec")
     ns = {}
@@ -132,7 +132,7 @@ def test_flat_load_is_local_and_repeatable(tmp_path):
 
 
 def test_reinit_refuses_to_replace_a_running_native_worker(tmp_path):
-    output = tmp_path / "ASHARE_AGENT.py"
+    output = tmp_path / "QMTAIRLOCK.py"
     build(output)
     ns = {"_runtime": SimpleNamespace(stop=mock.Mock(side_effect=RuntimeError("still running")))}
     with pytest.raises(RuntimeError, match="still running"):

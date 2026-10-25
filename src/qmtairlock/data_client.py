@@ -13,7 +13,7 @@ class BigQmtXtData:
     def __init__(self, client):
         self.client = client
         self._cache = None
-        from .options_client import OptionsClient
+        from .option_analytics_client import OptionsClient
 
         self.options = OptionsClient(self)
 

@@ -12,6 +12,6 @@ def build_transport(config, account_id):
         from .pipe_relay_transport import PipeRelayTransport
 
         return PipeRelayTransport(relay_command=relay, account_id=account_id, **pipe)
-    from .pipe_transport import NamedPipeTransport
+    from .pipe_client import NamedPipeClient
 
-    return NamedPipeTransport(account_id=account_id, **pipe)
+    return NamedPipeClient(account_id=account_id, **pipe)

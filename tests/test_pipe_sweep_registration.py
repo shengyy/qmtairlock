@@ -3,19 +3,18 @@
 import threading
 from unittest import mock
 
-from qmtairlock.transports.pipe_client import ClientConnection
-from qmtairlock.transports.pipe_transport import NamedPipeTransport
+from qmtairlock.transports.pipe_client import ClientConnection, NamedPipeClient
 
 
 def test_sweep_does_not_close_newly_registered_live_thread(monkeypatch):
-    transport = NamedPipeTransport()
+    transport = NamedPipeClient()
     dll = mock.Mock()
-    transport._dll = lambda: dll
+    transport._wire.dll = lambda: dll
     original = threading.enumerate
     ready, release = (threading.Event(), threading.Event())
 
     def register():
-        with transport._server_lock:
+        with transport._lock:
             transport._client_threads[threading.current_thread().ident] = (ClientConnection(dll, 321), object())
         ready.set()
         release.wait(timeout=3)

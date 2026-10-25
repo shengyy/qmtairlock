@@ -12,14 +12,14 @@ import uuid
 import pytest
 
 from qmtairlock.transports.pipe_relay import read_frame, write_frame
-from qmtairlock.transports.pipe_transport import NamedPipeTransport
+from qmtairlock.transports.pipe_server import NamedPipeServer
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows named pipes required")
 
 
 @pytest.fixture
 def pair():
-    server = NamedPipeTransport(pipe_name="bigqmt_relay_test_" + uuid.uuid4().hex)
+    server = NamedPipeServer(pipe_name="bigqmt_relay_test_" + uuid.uuid4().hex)
     process = subprocess.Popen(
         [sys.executable, "-B", "-m", "qmtairlock.transports.pipe_relay"],
         stdin=subprocess.PIPE,

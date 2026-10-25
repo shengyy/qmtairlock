@@ -10,8 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from qmtairlock.transports.base import TransportError
-from qmtairlock.transports.pipe_client import ClientConnection
-from qmtairlock.transports.pipe_transport import NamedPipeTransport
+from qmtairlock.transports.pipe_client import ClientConnection, NamedPipeClient
 
 
 def test_stop_during_connect_closes_unregistered_handle_and_refuses_future_requests():
@@ -24,9 +23,9 @@ def test_stop_during_connect_closes_unregistered_handle_and_refuses_future_reque
         return 77
 
     dll.CreateFileW.side_effect = connect
-    client = NamedPipeTransport()
-    client._dll = lambda: dll
-    client._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
+    client = NamedPipeClient()
+    client._wire.dll = lambda: dll
+    client._wire._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
     with ThreadPoolExecutor(1) as pool:
         pending = pool.submit(client.send_request, {"request_id": "one"}, 1)
         assert entered.wait(1)
@@ -45,7 +44,7 @@ def test_total_deadline_cancels_a_blocked_write_without_resending():
     cancelled = threading.Event()
     dll = Mock()
     dll.CancelIoEx.side_effect = lambda *args: cancelled.set()
-    client = NamedPipeTransport()
+    client = NamedPipeClient()
     connection = ClientConnection(dll, 77)
     client._client_connection = lambda deadline: connection
 
@@ -53,14 +52,14 @@ def test_total_deadline_cancels_a_blocked_write_without_resending():
         assert cancelled.wait(1)
         raise TransportError("write interrupted")
 
-    client._write = Mock(side_effect=write)
-    client._read = Mock()
+    client._wire.write = Mock(side_effect=write)
+    client._wire.read = Mock()
     started = time.monotonic()
     with pytest.raises(TransportError):
         client.send_request({"request_id": "one"}, 0.02)
     assert time.monotonic() - started < 0.5
-    client._write.assert_called_once()
-    client._read.assert_not_called()
+    client._wire.write.assert_called_once()
+    client._wire.read.assert_not_called()
     connection.close()
 
 

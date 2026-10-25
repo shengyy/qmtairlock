@@ -75,16 +75,17 @@ def test_relay_forwards_exact_bytes_without_retries():
     class Pipe:
         def __init__(self, **kw):
             self.kw = kw
+            self._wire = self
 
         def _client_handle(self):
             events.append((self.path, self.kw))
             return 10
 
-        def _write(self, handle, payload):
+        def write(self, handle, payload):
             events.append(payload)
             return len(payload)
 
-        def _read(self, handle):
+        def read(self, handle):
             return b'{"ok":true}'
 
         def stop(self):
@@ -105,12 +106,12 @@ def test_relay_write_error_is_not_retried():
 
     class Pipe:
         def __init__(self, **kw):
-            pass
+            self._wire = self
 
         def _client_handle(self):
             return 10
 
-        def _write(self, *a):
+        def write(self, *a):
             events.append("write")
             raise OSError("broken")
 
@@ -331,14 +332,15 @@ def test_relay_native_connector_retries_only_startup_errors(error, monkeypatch):
     import ctypes
     from types import SimpleNamespace
 
-    from qmtairlock.transports.pipe_transport import INVALID_HANDLE_VALUE, NamedPipeTransport
+    from qmtairlock.transports.pipe_client import NamedPipeClient
+    from qmtairlock.transports.pipe_native import INVALID_HANDLE_VALUE
 
-    transport = NamedPipeTransport(connect_timeout_seconds=1)
+    transport = NamedPipeClient(connect_timeout_seconds=1)
     dll = mock.Mock()
     dll.CreateFileW.side_effect = [INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE, 42]
-    transport._dll = lambda: dll
-    transport._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
-    transport._last_error = lambda: error
+    transport._wire.dll = lambda: dll
+    transport._wire._wintypes = SimpleNamespace(DWORD=ctypes.c_uint32)
+    transport._wire.last_error = lambda: error
     sleeps = []
     monkeypatch.setattr(time, "sleep", lambda duration: sleeps.append(duration))
     try:
@@ -349,13 +351,14 @@ def test_relay_native_connector_retries_only_startup_errors(error, monkeypatch):
 
 
 def test_relay_native_connector_respects_connect_deadline():
-    from qmtairlock.transports.pipe_transport import INVALID_HANDLE_VALUE, NamedPipeTransport
+    from qmtairlock.transports.pipe_client import NamedPipeClient
+    from qmtairlock.transports.pipe_native import INVALID_HANDLE_VALUE
 
-    transport = NamedPipeTransport(connect_timeout_seconds=0.01)
+    transport = NamedPipeClient(connect_timeout_seconds=0.01)
     dll = mock.Mock()
     dll.CreateFileW.return_value = INVALID_HANDLE_VALUE
-    transport._dll = lambda: dll
-    transport._last_error = lambda: 231
+    transport._wire.dll = lambda: dll
+    transport._wire.last_error = lambda: 231
     started = time.monotonic()
     with pytest.raises(TransportError):
         transport._client_handle()
@@ -372,7 +375,7 @@ def test_missing_relay_command_is_a_transport_error():
 
 
 def test_module_pipe_failure_exits_with_stdin_still_open():
-    script = '\nimport os,sys,types,runpy\nfrom qmtairlock.transports.pipe_transport import NamedPipeTransport\nNamedPipeTransport._client_handle = lambda self: 42\nNamedPipeTransport._write = lambda self,h,payload: len(payload)\ndef broken(*args): raise OSError("pipe closed")\nNamedPipeTransport._read = broken\nNamedPipeTransport.stop = lambda self: None\nsys.modules["msvcrt"] = types.SimpleNamespace(setmode=lambda *args: None)\nos.name = "nt"\nos.O_BINARY = 0\nrunpy.run_module("qmtairlock.transports.pipe_relay",run_name="__main__")\n'
+    script = '\nimport os,sys,types,runpy\nfrom qmtairlock.transports.pipe_client import NamedPipeClient\nfrom qmtairlock.transports.pipe_native import NativePipeIO\nNamedPipeClient._client_handle = lambda self: 42\nNativePipeIO.write = lambda self,h,payload: len(payload)\ndef broken(*args): raise OSError("pipe closed")\nNativePipeIO.read = broken\nNamedPipeClient.stop = lambda self: None\nsys.modules["msvcrt"] = types.SimpleNamespace(setmode=lambda *args: None)\nos.name = "nt"\nos.O_BINARY = 0\nrunpy.run_module("qmtairlock.transports.pipe_relay",run_name="__main__")\n'
     process = subprocess.Popen(
         [sys.executable, "-B", "-c", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )

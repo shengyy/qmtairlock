@@ -1,4 +1,4 @@
-"""QMT-injected formula calls, with no FormulaServer socket client."""
+"""Built-in QMT formula calls through ContextInfo and captured native functions."""
 
 
 class MarketFormulas:

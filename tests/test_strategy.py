@@ -65,7 +65,7 @@ def test_built_strategy_lifecycle_under_forbidden_io(tmp_path):
     ):
         exec(code, namespace)
         runtime_module = namespace["_load"]("qmtairlock.strategy_runtime")
-        runtime_module.NamedPipeTransport = Transport
+        runtime_module.NamedPipeServer = Transport
         namespace["QMT_ACCOUNT_ID"] = "TEST"
         namespace["QMT_RPC_CONFIG"]["account_types"] = ["CREDIT"]
         namespace["get_trade_detail_data"] = lambda *args: []
@@ -125,9 +125,10 @@ def test_flat_load_is_local_and_repeatable(tmp_path):
     original_import = builtins.__import__
     exec(code, ns)
     version = ns["_load"]("qmtairlock.version")
+    expected_version = version.__version__
     version.__version__ = "sentinel"
     exec(code, ns)
-    assert ns["_load"]("qmtairlock.version").__version__ == "0.1.0"
+    assert ns["_load"]("qmtairlock.version").__version__ == expected_version
     assert builtins.__import__ is original_import
 
 

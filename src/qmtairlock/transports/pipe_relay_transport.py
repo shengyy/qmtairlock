@@ -10,8 +10,8 @@ import threading
 import time
 
 from .base import RpcTransport, TransportError, TransportTimeout
+from .pipe_native import DEFAULT_PIPE_NAME, _validate_pipe_response, pipe_path
 from .pipe_relay import frame_header, frame_size
-from .pipe_transport import DEFAULT_PIPE_NAME, _validate_pipe_response, pipe_path
 
 
 class _IncompleteWrite(TransportError):

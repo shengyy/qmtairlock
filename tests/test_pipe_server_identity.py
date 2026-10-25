@@ -10,8 +10,8 @@ import pytest
 
 from qmtairlock.rpc_service import RpcService
 from qmtairlock.transports.base import TransportError
-from qmtairlock.transports.pipe_client import ClientConnection
-from qmtairlock.transports.pipe_transport import NamedPipeTransport, _ServerPipeConnection
+from qmtairlock.transports.pipe_client import ClientConnection, NamedPipeClient
+from qmtairlock.transports.pipe_server import NamedPipeServer, _ServerPipeConnection
 
 
 class _ThreadNamingMarketData:
@@ -46,11 +46,11 @@ def close_connection(server, connection):
 
 def fake_wire(server, writes):
     incoming = []
-    server._dll = lambda: mock.Mock()
+    server._wire.dll = lambda: mock.Mock()
     server._accept_loop = lambda: None
     server._peek_available = lambda handle: bool(incoming)
-    server._read = lambda handle: json.dumps(incoming.pop(0)).encode()
-    server._write = lambda handle, data: writes.append((handle, json.loads(data)))
+    server._wire.read = lambda handle: json.dumps(incoming.pop(0)).encode()
+    server._wire.write = lambda handle, data: writes.append((handle, json.loads(data)))
     return incoming
 
 
@@ -72,7 +72,7 @@ def request(request_id, method="ping"):
 @pytest.mark.parametrize("stop_service", [False])
 def test_late_heavy_reply_cannot_reach_reused_handle(stop_service):
     writes = []
-    old = NamedPipeTransport()
+    old = NamedPipeServer()
     incoming = fake_wire(old, writes)
     market = BlockingMarket()
     _, service = _service(market_data=market, transport=old)
@@ -86,7 +86,7 @@ def test_late_heavy_reply_cannot_reach_reused_handle(stop_service):
     try:
         if stop_service:
             service.stop()
-            new = NamedPipeTransport()
+            new = NamedPipeServer()
             incoming = fake_wire(new, writes)
             new.start_receiving(lambda req: {"request_id": req["request_id"], "ok": True}, background_threads=False)
         else:
@@ -116,7 +116,7 @@ def test_late_heavy_reply_cannot_reach_reused_handle(stop_service):
 
 
 def test_drain_delivers_exactly_one_response():
-    server = NamedPipeTransport()
+    server = NamedPipeServer()
     writes = []
     incoming = fake_wire(server, writes)
     server.start_receiving(lambda req: {"request_id": req["request_id"], "ok": True}, background_threads=False)
@@ -131,19 +131,19 @@ def test_drain_delivers_exactly_one_response():
 
 @pytest.mark.parametrize("response", [{"request_id": "other", "ok": True}, {"ok": True}])
 def test_native_client_rejects_wrong_request_id_without_resending(response):
-    client = NamedPipeTransport()
+    client = NamedPipeClient()
     client._client_connection = mock.Mock(return_value=ClientConnection(mock.Mock(), 42))
-    client._write = mock.Mock()
-    client._read = mock.Mock(return_value=json.dumps(response).encode())
+    client._wire.write = mock.Mock()
+    client._wire.read = mock.Mock(return_value=json.dumps(response).encode())
     client._drop_client_handle = mock.Mock()
     with pytest.raises(TransportError):
         client.send_request(request("mine", "order_stock"), 1)
-    client._write.assert_called_once()
+    client._wire.write.assert_called_once()
     client._drop_client_handle.assert_called_once()
 
 
 def test_close_between_identity_check_and_write_cannot_target_reused_handle():
-    server, writes = (NamedPipeTransport(), [])
+    server, writes = (NamedPipeServer(), [])
     fake_wire(server, writes)
     server.start_receiving(lambda req: None, background_threads=False)
     old = attach(server, 42)
@@ -177,7 +177,7 @@ def test_close_between_identity_check_and_write_cannot_target_reused_handle():
 
 
 def test_closed_background_outbox_is_never_flushed_to_reused_handle():
-    server, writes = (NamedPipeTransport(), [])
+    server, writes = (NamedPipeServer(), [])
     fake_wire(server, writes)
     server.start_receiving(lambda req: None, background_threads=True)
     try:

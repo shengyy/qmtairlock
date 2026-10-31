@@ -35,6 +35,6 @@ Use lowercase kebab-case filenames inside `docs/`. Keep root files as standard e
 
 ## Context layers
 
-1. `AGENTS.md` contains persistent boundaries and a routing table; `CLAUDE.md` points to it.
+1. `AGENTS.md` contains persistent boundaries and a routing table.
 2. This map and the relevant owner documents provide task-specific context.
 3. Read the owning implementation and targeted tests before changing or claiming behavior.

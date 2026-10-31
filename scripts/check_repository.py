@@ -12,7 +12,6 @@ ROOT_FILES = {
     "README.zh-CN.md",
     "PRODUCT.md",
     "AGENTS.md",
-    "CLAUDE.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "CHANGELOG.md",
@@ -45,8 +44,6 @@ def check():
                 errors.append("%s has %d lines; split by responsibility" % (path, count))
     if len((ROOT / "AGENTS.md").read_text().splitlines()) > 60:
         errors.append("AGENTS.md must have at most 60 lines")
-    if (ROOT / "CLAUDE.md").read_text() != "@AGENTS.md\n":
-        errors.append("CLAUDE.md must contain only @AGENTS.md")
     for path in (ROOT / "docs").glob("*"):
         if path.name != "README.md" and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md", path.name):
             errors.append("invalid docs name: " + path.name)

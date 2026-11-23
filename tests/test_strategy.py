@@ -252,3 +252,29 @@ def test_client_stamps_its_own_deadline_on_every_request():
     before = time.time()
     client.call("ping")
     assert before + 7 <= sent[0]["deadline_at"] <= time.time() + 7
+
+
+def test_clock_skew_and_server_error_detail_are_read_only_client_views():
+    from qmtairlock.client import BigQmtRpcClient, RpcServerRepliedError
+
+    class Host:
+        def send_request(self, request, timeout):
+            if request["method"] == "ping":
+                data = {"server_time": time.time() + 5}
+                return {"request_id": request["request_id"], "account_id": "TEST", "ok": True, "data": data}
+            detail = {"downloaded": ["A"], "pending": ["B"]}
+            return {
+                "request_id": request["request_id"],
+                "account_id": "TEST",
+                "ok": False,
+                "error": "x",
+                "data": detail,
+            }
+
+    client = BigQmtRpcClient("TEST")
+    client._transport_instance = Host()
+    skew = client.clock_skew()
+    assert 4.5 < skew["skew_seconds"] < 5.5 and skew["round_trip_seconds"] >= 0
+    with pytest.raises(RpcServerRepliedError) as failed:
+        client.call("download_history_data2")
+    assert failed.value.data == {"downloaded": ["A"], "pending": ["B"]}

@@ -28,7 +28,9 @@ Account reads, credit contract queries and writes execute on the strategy callba
 
 Dividend queries use the callback thread for a single date, one supplied endpoint or no dates. Only two nonempty, distinct endpoints use the heavy worker for range expansion.
 
-Native `download_history_data` and `download_history_data2` calls run on the callback thread. Historical bar reads use the heavy worker; they cannot queue ahead of a native download.
+Native `download_history_data` and `download_history_data2` calls run on the callback thread. Batch downloads run one chunk of `download_chunk_codes` stocks per tick (default 10), after that tick's requests, so a long batch no longer blocks `ping` for its whole duration; a chunk already inside QMT still blocks the callback thread until it returns. Historical bar reads use the heavy worker; they cannot queue ahead of a native download.
+
+From the reference implementation, not yet verified on our terminal: QMT history downloads only append after the last locally stored bar, so a window that ends before that bar is accepted and writes nothing; the 3.12 host's `get_market_data_ex` subscribes by default; multi-instrument `get_market_data`/`get_financial_data` answers use multi-level frame columns; native downloads may hold the GIL for their whole duration, which would also stall the heavy worker.
 
 ## Windows and WSL clients
 

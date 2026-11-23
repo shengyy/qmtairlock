@@ -30,6 +30,7 @@ flowchart LR
 | `transports/pipe_relay`, `pipe_relay_transport` | Length-prefixed stdio framing and client subprocess lifecycle |
 | `qmt_injected`, `strategy_runtime` | Capture native globals and own strategy lifecycle |
 | `rpc_service`, `rpc_dispatch`, `account_scope` | Scheduling, account isolation, write deduplication and routing |
+| `rpc_download` | Batch downloads stepped one chunk per callback tick, with deadline-bounded partial results |
 | `rpc_trade_handlers`, `rpc_settlement`, `order_watch` | Execution requests and bounded reconciliation against native identities |
 | `rpc_credit`, `rpc_account_handlers`, `rpc_native` | Main-thread native account/credit queries |
 | `rpc_market_handlers`, `adapters/market_*` | Composed ticks, bars, dividends, metadata, options, financial and formula domains |

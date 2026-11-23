@@ -10,11 +10,14 @@
 ### Added
 
 - Requests carry the client deadline (`deadline_at`); a request that waited unread past it, for example behind a native download, is refused instead of running after the client gave up.
+- Batch history downloads run one chunk of `download_chunk_codes` stocks per callback tick, so `ping` and other short requests are answered between chunks; when the deadline would pass, the reply is `DownloadIncomplete: k/n` with the downloaded and pending stocks.
+- Bar reads pass `subscribe=False` to `get_market_data_ex` unless the caller asks to subscribe.
+- `RequestExpired` replies carry the server time and the client deadline; `ping` returns `server_time` and the client offers a read-only `clock_skew()`.
 - `ping` reports the host interpreter version and, when already loaded by the host, pandas and numpy versions.
 
 ### Fixed
 
-- Read native bar frames by position so label-indexed pandas 3 frames no longer turn dividend-range scans into empty results; frame shape errors now propagate instead of returning no rows.
+- Read native bar frames by position so label-indexed pandas 3 frames no longer turn dividend-range scans into empty results; frame shape errors now propagate instead of returning no rows. Frames with multi-level columns are rejected instead of being encoded with tuple-string column names.
 
 - Keep single-date dividend queries on the callback thread so queued history reads cannot delay them; only date ranges use the heavy worker.
 - Keep native history downloads on the callback thread so large market reads cannot queue ahead of a small download.

@@ -10,6 +10,7 @@ import time
 from .account_scope import dispatch_deadline
 from .rpc_codec import to_jsonable
 from .rpc_dispatch import LISTENER_DEFERRED_METHODS, ORDER_METHODS, canonical_method
+from .rpc_download import DownloadIncomplete, PendingDownload
 from .rpc_settlement import PendingSettlement, SettlementManager
 
 # Same-host wall clocks (Windows and WSL) may differ slightly; never refuse before this margin.
@@ -64,6 +65,7 @@ class RpcService:
         self._heavy_queue = queue.Queue(maxsize=heavy_limit)
         self._heavy_replies = queue.Queue(maxsize=heavy_limit)
         self._pending_settlements = []
+        self._pending_downloads = []
         self.settlement = SettlementManager(getattr(handlers, "order_queries", None), order_watch)
         self._order_requests = collections.OrderedDict()
         self._order_lock = threading.RLock()
@@ -208,7 +210,27 @@ class RpcService:
             self.process_request(request)
             processed += 1
             self.settle_pending_orders()
+        self.step_download()
         return processed
+
+    def step_download(self):
+        """Run at most one native download chunk, after this tick's other requests."""
+        self._assert_main()
+        if not self._pending_downloads:
+            return
+        pending = self._pending_downloads[0]
+        response = pending.response
+        try:
+            if not pending.step():
+                return
+            response["data"] = True
+        except DownloadIncomplete as exc:
+            response.update(ok=False, error=str(exc), data=to_jsonable(exc.progress))
+        except Exception as exc:
+            response.update(ok=False, error="%s: %s" % (type(exc).__name__, exc), data=to_jsonable(pending.progress()))
+        self._pending_downloads.pop(0)
+        response["handled_at"] = datetime.datetime.now().isoformat()
+        self._publish_response(pending.request, response)
 
     def settle_pending_orders(self):
         self._assert_main()
@@ -303,6 +325,10 @@ class RpcService:
             else:
                 with dispatch_deadline(deadline):
                     result = self.handlers.handle(method, params)
+            if isinstance(result, PendingDownload):
+                result.request, result.response, result.deadline = request, response, deadline
+                self._pending_downloads.append(result)
+                return None
             if isinstance(result, PendingSettlement):
                 result.request, result.response = request, response
                 self._pending_settlements.append(result)
@@ -312,6 +338,12 @@ class RpcService:
         except Exception as exc:
             if isinstance(exc, TimeoutError) and str(exc) == "RequestExpired: not dispatched":
                 state = "refused"
+                response["data"] = {
+                    "server_now": time.time(),
+                    "received_at": request.get("_received_at"),
+                    "deadline_at": request.get("deadline_at"),
+                    "timeout_seconds": request.get("timeout_seconds"),
+                }
             response.update(ok=False, error="%s: %s" % (type(exc).__name__, exc))
         if claimed:
             self._remember(key, response, state)

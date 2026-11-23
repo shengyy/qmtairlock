@@ -1,6 +1,7 @@
 """RPC routing, bound-account checks and hard main-thread method boundaries."""
 
 import sys
+import time
 
 from .account_scope import AccountBinding, request_account_type
 from .rpc_account_handlers import AccountHandlers
@@ -129,6 +130,7 @@ class BigQmtRpcHandlers:
             "allow_order_methods": self.allow_order_methods,
             "rpc_revision": "qmtairlock-v1",
             "host": host_runtime(),
+            "server_time": time.time(),
         }
 
     def handle(self, method, params=None):

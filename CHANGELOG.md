@@ -9,6 +9,7 @@
 
 ### Added
 
+- `get_request_outcome` is answered in arrival order behind orders read before it, so a query sent right after a timed-out order sees that order's final state instead of `unknown`.
 - Requests carry the client deadline (`deadline_at`); a request that waited unread past it, for example behind a native download, is refused instead of running later (one second of clock tolerance).
 - Batch history downloads run one chunk of `download_chunk_codes` stocks per callback tick, so `ping` and other short requests are answered between chunks; when the deadline would pass, the reply is `DownloadIncomplete: k/n` with the downloaded and pending stocks.
 - Bar reads pass `subscribe=False` to `get_market_data_ex` unless the caller asks to subscribe.

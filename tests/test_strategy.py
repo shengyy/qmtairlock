@@ -226,6 +226,23 @@ def test_request_left_unread_past_the_client_deadline_is_refused_not_run():
     assert handlers.calls == ["ping", "cancel_order"]
 
 
+def test_outcome_query_read_with_an_expired_order_answers_after_it_is_refused():
+    handlers = RecordingHandlers()
+    transport = Transport()
+    service = RpcService(handlers, "TEST", transport, process_in_listener=True, listener_methods={"*"})
+    now = time.time()
+    base = {"account_id": "TEST", "timeout_seconds": 10}
+    # Both frames sat in the pipe behind a blocked callback thread and are read in one batch.
+    service.enqueue_payload(dict(base, request_id="order", method="passorder", params={}, deadline_at=now - 5))
+    service.enqueue_payload(
+        dict(base, request_id="ask", method="get_request_outcome", params={"request_id": "order"}, deadline_at=now + 5)
+    )
+    assert transport.replies == []
+    service.drain_pending(10)
+    replies = {reply["request_id"]: reply for reply in transport.replies}
+    assert replies["ask"]["data"]["state"] == "refused" and handlers.calls == []
+
+
 def test_client_deadline_tolerates_small_clock_differences():
     from qmtairlock.rpc_service import CLIENT_DEADLINE_TOLERANCE_SECONDS, request_deadline
 

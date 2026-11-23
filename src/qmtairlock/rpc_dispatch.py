@@ -61,9 +61,11 @@ def native_routes(owner):
     return {name[len("_handle_") :]: getattr(owner, name) for name in dir(type(owner)) if name.startswith("_handle_")}
 
 
+# The outcome query is deferred too, so it is answered after any order read before it.
 LISTENER_DEFERRED_METHODS = frozenset(
     TRADE_READ_METHODS
     | ORDER_METHODS
+    | {"get_request_outcome"}
     | {
         name[len("_handle_") :]
         for cls in (AccountHandlers, CreditHandlers)

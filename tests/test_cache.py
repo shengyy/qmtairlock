@@ -92,6 +92,21 @@ def test_requested_fields_missing_from_the_cache_are_an_error(tmp_path):
         data.get_local_data(field_list=["close", "preClose"], stock_list=["X"], period="1m")
 
 
+def test_an_invalid_file_is_left_out_of_a_multi_instrument_read(tmp_path):
+    data = BigQmtXtData(
+        SimpleNamespace(local_cache_config={"enabled": True, "dir": str(tmp_path), "format": "parquet"})
+    )
+    cache = data._local_cache()
+    cache.write("GOOD", "1m", _bars())
+    path = cache.path("BAD", "1m")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    _bars().drop(columns=["amount"]).to_parquet(path)
+    got = data.get_local_data(stock_list=["BAD", "GOOD"], period="1m")
+    assert list(got) == ["GOOD"]
+    assert len(got["GOOD"]) == 2
+    assert Path(path).exists()
+
+
 def test_a_merge_never_builds_on_an_invalid_file(tmp_path):
     cache = LocalMarketCache(str(tmp_path))
     path = cache.path("X", "1m")

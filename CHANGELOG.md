@@ -14,7 +14,7 @@
 - Batch history downloads run one chunk of `download_chunk_codes` stocks per callback tick, so `ping` and other short requests are answered between chunks; when the deadline would pass, the reply is `DownloadIncomplete: k/n` with the downloaded and pending stocks.
 - Bar reads pass `subscribe=False` to `get_market_data_ex` unless the caller asks to subscribe.
 - `RequestExpired` replies carry the server time and the client deadline; `ping` returns `server_time` and the client offers a read-only `clock_skew()`.
-- The local cache checks bar rows before every merge, counts rejected rows, requires the core bar columns in bar-period files and raises `CacheFileInvalid` with the file and reason on reading an invalid file; `audit()` lists invalid files read-only.
+- The local cache checks bar rows before every merge, counts rejected rows, requires the core bar columns in bar-period files and raises `CacheFileInvalid` with the file and reason on reading or merging into an invalid file; `get_local_data` leaves that instrument out with a logged warning and still serves the rest of the request; `audit()` lists invalid files read-only.
 - `ping` reports the host interpreter version and the host's pandas and numpy versions, read from the loaded module or the installed distribution's metadata without importing either.
 
 ### Fixed

@@ -116,3 +116,20 @@ def test_ping_answers_in_the_same_tick_while_a_heavy_read_is_running():
     finally:
         release.set()
         runtime.stop()
+
+
+def test_no_chunk_starts_while_read_requests_still_wait():
+    chunks = []
+    runtime, transport = _runtime(lambda codes, *args: chunks.append(list(codes)), drain_budget_seconds=0)
+    try:
+        transport.requests.append(_download())
+        runtime.adjust()
+        assert len(chunks) == 1
+        transport.requests.extend(_request("q%d" % index, "describe_trade_detail_fields") for index in range(3))
+        runtime.adjust()
+        assert not runtime.service.pending.empty() and len(chunks) == 1
+        while not runtime.service.pending.empty():
+            runtime.adjust()
+        assert len(chunks) == 2
+    finally:
+        runtime.stop()

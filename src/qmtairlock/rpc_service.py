@@ -210,7 +210,9 @@ class RpcService:
             self.process_request(request)
             processed += 1
             self.settle_pending_orders()
-        self.step_download()
+        if self.pending.empty():
+            # A chunk blocks this thread; requests already read wait for at most one, never one per tick.
+            self.step_download()
         return processed
 
     def step_download(self):

@@ -167,9 +167,10 @@ class MarketBars:
         if subscribe is None and method_name in ("get_market_data_ex", "get_market_data_ex_ori"):
             # The 3.12 host subscribes by default and keeps every read code in its subscription pool.
             subscribe = False
-        shapes = []
         if subscribe is not None:
-            shapes.append((method_name, (), dict(big_kwargs_filled, subscribe=bool(subscribe))))
+            # One shape only: a fallback without the keyword would return to the native default.
+            return [(method_name, (), dict(big_kwargs_filled, subscribe=bool(subscribe)))]
+        shapes = []
         shapes.extend(
             [
                 (method_name, (), big_kwargs_filled),

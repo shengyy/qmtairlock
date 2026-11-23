@@ -1,7 +1,7 @@
 """Market RPC client and client-only Parquet cache coordination."""
 
 from .data_frames import _divid_factors_frame, _normalize_market_data_frame, _normalize_market_data_result
-from .local_cache import LocalMarketCache
+from .local_cache import CacheFileInvalid, LocalMarketCache
 from .logging_setup import get_logger
 
 log = get_logger("data_client")
@@ -109,6 +109,11 @@ class BigQmtXtData:
             frame = cache.read(code, period, start_time, end_time, count, dividend_type)
             if frame is not None and len(frame):
                 frame = _normalize_market_data_frame(frame, field_list=field_list)
+                missing = [name for name in field_list or [] if name not in frame.columns]
+                if missing:
+                    raise CacheFileInvalid(
+                        "%s: missing column(s) %s" % (cache.path(code, period, dividend_type), ",".join(missing))
+                    )
                 result[code] = frame[[name for name in field_list if name in frame.columns]] if field_list else frame
         return result
 

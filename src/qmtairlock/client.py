@@ -1,6 +1,7 @@
 """Single-send RPC client over native named pipes or the WSL stdio relay."""
 
 import threading
+import time
 import uuid
 
 from .config import client_config, positive_seconds
@@ -11,7 +12,15 @@ from .transports.factory import build_transport
 
 
 class RpcServerRepliedError(RuntimeError):
-    """An explicit server error; write outcome may still be unknown."""
+    """An explicit server error; write outcome may still be unknown.
+
+    ``data`` carries the reply's structured detail when the server sent one, for
+    example download progress or the clocks behind ``RequestExpired``.
+    """
+
+    def __init__(self, message, data=None):
+        super().__init__(message)
+        self.data = data
 
 
 class BigQmtRpcClient:
@@ -53,6 +62,7 @@ class BigQmtRpcClient:
             "method": str(method),
             "params": dict(params or {}),
             "timeout_seconds": timeout,
+            "deadline_at": time.time() + timeout,
         }
         response = self._transport().send_request(request, timeout)
         if not isinstance(response, dict) or response.get("request_id") != request["request_id"]:
@@ -60,12 +70,26 @@ class BigQmtRpcClient:
         if response.get("account_id") != account:
             raise TransportError("RPC response account mismatch; outcome unknown")
         if response.get("ok") is not True:
-            raise RpcServerRepliedError(response.get("error") or "RPC failed")
+            raise RpcServerRepliedError(response.get("error") or "RPC failed", response.get("data"))
         if response.get("server_error"):
             raise RpcServerRepliedError(response["server_error"])
         if response.get(TYPED_PAYLOAD_FLAG) is False:
             return response.get("data")
         return _restore_jsonable(response.get("data"))
+
+    def clock_skew(self, timeout_seconds=None):
+        """Read-only: host clock minus this client's clock, measured at the ping midpoint.
+
+        A client clock far behind the host makes every request look expired
+        (``RequestExpired``); this reports the difference and never adjusts it.
+        """
+        sent = time.time()
+        reply = self.call("ping", timeout_seconds=timeout_seconds)
+        received = time.time()
+        return {
+            "skew_seconds": float(reply["server_time"]) - (sent + received) / 2.0,
+            "round_trip_seconds": received - sent,
+        }
 
     def call_tracked(self, method, params=None, **kwargs):
         request_id = uuid.uuid4().hex

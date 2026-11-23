@@ -11,10 +11,10 @@ from .adapters.market_ticks import MarketTicks
 
 
 class MarketHandlers:
-    def __init__(self, context_info, qmt_api=None, full_tick_warmup_wait_seconds=0):
+    def __init__(self, context_info, qmt_api=None, full_tick_warmup_wait_seconds=0, download_chunk_codes=10):
         self.context_info = context_info
         native = MarketContext(context_info, qmt_api)
-        self.bars = MarketBars(native)
+        self.bars = MarketBars(native, download_chunk_codes)
         native.bars = self.bars
         self.metadata = MarketMetadata(native)
         native.metadata = self.metadata

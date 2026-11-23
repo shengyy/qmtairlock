@@ -51,6 +51,9 @@ def to_jsonable(value):
         except Exception:
             return str(value)
     if hasattr(value, "to_dict") and hasattr(value, "columns") and hasattr(value, "index"):
+        if getattr(value.columns, "nlevels", 1) > 1:
+            # Multi-instrument answers on the 3.12 host; flattening would turn names into tuple strings.
+            raise ValueError("multi-level frame columns are not encoded; request one instrument per call")
         try:
             frame = value.reset_index()
             return {

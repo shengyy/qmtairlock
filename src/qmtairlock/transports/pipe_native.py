@@ -39,12 +39,7 @@ def _kernel32():
         )
     from ctypes import wintypes
 
-    # 部分券商 QMT 内置 Python 3.6 的 ctypes.wintypes 缺 HANDLE/BOOL
-    # （切 pipe 即 AttributeError）。Win32 HANDLE 是指针宽、BOOL 是
-    # 32 位有符号整型，用 c_void_p / c_int32 兜底，类型全的 build 不受影响。
-    handle_type = getattr(wintypes, "HANDLE", ctypes.c_void_p)
-    bool_type = getattr(wintypes, "BOOL", ctypes.c_int32)
-
+    handle_type, bool_type = wintypes.HANDLE, wintypes.BOOL
     dll = ctypes.WinDLL("kernel32", use_last_error=True)
     pointer, dword = ctypes.c_void_p, wintypes.DWORD
     signatures = {

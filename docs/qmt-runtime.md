@@ -2,7 +2,7 @@
 
 ## Host setup
 
-Build `dist/QMTAIRLOCK.py` using the command in [Contributing](../CONTRIBUTING.md). Copy the generated file into the QMT strategy editor as GBK. The editable configuration region is bounded by `QMT_CONFIG_BEGIN` and `QMT_CONFIG_END`:
+Build `dist/QMTAIRLOCK.py` using the command in [Contributing](../CONTRIBUTING.md). Copy the generated file into the QMT strategy editor. The file is pure ASCII, so the editor and host decoding cannot change it. The editable configuration region is bounded by `QMT_CONFIG_BEGIN` and `QMT_CONFIG_END`:
 
 ```python
 QMT_ACCOUNT_ID = "YOUR_ACCOUNT"
@@ -20,7 +20,7 @@ The host must supply `ContextInfo.run_time` and the native methods required by t
 
 ## Runtime environment and threads
 
-The host is a **self-contained standard-library runtime with in-memory state and zero external middleware dependencies**. Sources parse as Python 3.6. Runtime boundary checks validate the embedded module graph and the allowed dependency surface.
+The host is a **self-contained standard-library runtime with in-memory state and zero external middleware dependencies**. The host baseline is the Python 3.12 embedded in QMT client 2.1.36 (with pandas 3 and numpy 2); sources parse as Python 3.12. This baseline is not yet verified on a real terminal. Native bar frames are indexed by time labels, so host code reads columns positionally (`list(frame[column])`), never `series[i]`. `ping` reports the interpreter and, when the host has already loaded them, the pandas and numpy versions. Runtime boundary checks validate the embedded module graph and the allowed dependency surface.
 
 The host graph includes the server listener, shared message I/O and native domain handlers. Client connection management, WSL relay processes, desktop launchers and local Parquet storage remain in their own external runtime. QMT manages its native data and strategy loading.
 
@@ -28,7 +28,9 @@ Account reads, credit contract queries and writes execute on the strategy callba
 
 Dividend queries use the callback thread for a single date, one supplied endpoint or no dates. Only two nonempty, distinct endpoints use the heavy worker for range expansion.
 
-Native `download_history_data` and `download_history_data2` calls run on the callback thread. Historical bar reads use the heavy worker; they cannot queue ahead of a native download.
+Native `download_history_data` and `download_history_data2` calls run on the callback thread. Batch downloads run one chunk of `download_chunk_codes` stocks per tick (default 10), after that tick's requests, so a long batch no longer blocks `ping` for its whole duration; a chunk already inside QMT still blocks the callback thread until it returns. Historical bar reads use the heavy worker; they cannot queue ahead of a native download.
+
+From the reference implementation, not yet verified on our terminal: QMT history downloads only append after the last locally stored bar, so a window that ends before that bar is accepted and writes nothing; the 3.12 host's `get_market_data_ex` subscribes by default; multi-instrument `get_market_data`/`get_financial_data` answers use multi-level frame columns; native downloads may hold the GIL for their whole duration, which would also stall the heavy worker.
 
 ## Windows and WSL clients
 

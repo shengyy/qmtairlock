@@ -3,6 +3,7 @@
 import time
 
 from ..logging_setup import get_logger
+from ..rpc_download import PendingDownload
 from .market_frames import (
     _as_list,
     _bool_flag,
@@ -56,13 +57,10 @@ def _frame_axis_rows(frame):
             out.append((row.get("stime"), row))
         return out
     if hasattr(frame, "columns") and hasattr(frame, "index"):
-        try:
-            columns = [name for name in frame.columns]
-            labels = list(frame.index)
-            series = dict(((name, list(frame[name])) for name in columns))
-            return [(labels[i], dict(((str(name), series[name][i]) for name in columns))) for i in range(len(labels))]
-        except Exception:
-            return []
+        columns = [name for name in frame.columns]
+        labels = list(frame.index)
+        series = dict(((name, list(frame[name])) for name in columns))
+        return [(labels[i], dict(((str(name), series[name][i]) for name in columns))) for i in range(len(labels))]
     return [(row.get("stime") or row.get("index") or row.get("time"), row) for row in _frame_rows(frame)]
 
 
@@ -99,8 +97,11 @@ def _leading_synthetic_bars(rows):
 class MarketBars:
     _SYNTH_FALLBACK_WARN_INTERVAL_SECONDS = 300.0
 
-    def __init__(self, native):
+    def __init__(self, native, download_chunk_codes=10):
         self.native = native
+        self.download_chunk_codes = int(download_chunk_codes)
+        if self.download_chunk_codes < 1:
+            raise ValueError("download_chunk_codes must be positive")
         self.context_info = native.context_info
         self.qmt_api = native.qmt_api
 
@@ -163,9 +164,13 @@ class MarketBars:
         big_kwargs_filled = dict(big_kwargs, fill_data=fill_data)
         positional_tail_filled = dict(positional_tail_kwargs, fill_data=fill_data)
         subscribe = params.get("subscribe")
-        shapes = []
+        if subscribe is None and method_name in ("get_market_data_ex", "get_market_data_ex_ori"):
+            # The 3.12 host subscribes by default and keeps every read code in its subscription pool.
+            subscribe = False
         if subscribe is not None:
-            shapes.append((method_name, (), dict(big_kwargs_filled, subscribe=bool(subscribe))))
+            # One shape only: a fallback without the keyword would return to the native default.
+            return [(method_name, (), dict(big_kwargs_filled, subscribe=bool(subscribe)))]
+        shapes = []
         shapes.extend(
             [
                 (method_name, (), big_kwargs_filled),
@@ -432,6 +437,9 @@ class MarketBars:
         )
 
     def download_history_data2(self, stock_list, period, start_time="", end_time="", incrementally=None):
-        return self._download(
-            "download_history_data2", _as_list(stock_list), period, start_time, end_time, incrementally
-        )
+        """Accepted chunks are submitted to QMT; whether rows were written is only known by reading them back."""
+
+        def run_chunk(codes):
+            return self._download("download_history_data2", codes, period, start_time, end_time, incrementally)
+
+        return PendingDownload(_as_list(stock_list), self.download_chunk_codes, run_chunk)

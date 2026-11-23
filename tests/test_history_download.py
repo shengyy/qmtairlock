@@ -5,6 +5,7 @@ import pytest
 
 from qmtairlock.qmt_injected import capture_qmt_injected_funcs
 from qmtairlock.rpc_dispatch import BigQmtRpcHandlers
+from qmtairlock.rpc_download import PendingDownload
 from qmtairlock.rpc_market_handlers import MarketHandlers
 
 CODES = ["600000.SH", "000001.SZ"]
@@ -18,7 +19,12 @@ def rpc(native=None, context=None):
 
 def request(owner, method="download_history_data2", **extra):
     codes = {"stock_code": CODES[0]} if method == "download_history_data" else {"stock_list": CODES}
-    return owner.handle(method, dict(codes, period=DATES[0], start_time=DATES[1], end_time=DATES[2], **extra))
+    result = owner.handle(method, dict(codes, period=DATES[0], start_time=DATES[1], end_time=DATES[2], **extra))
+    if isinstance(result, PendingDownload):
+        while not result.step():
+            pass
+        return True
+    return result
 
 
 @pytest.mark.parametrize("native_name", ["download_history_data", "down_history_data"])

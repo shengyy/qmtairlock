@@ -32,11 +32,12 @@ class StrategyRuntime:
             "order_settle_timeout_seconds",
             "default_strategy_name",
             "gil_switch_interval_seconds",
+            "download_chunk_codes",
         }
         unknown = set(config) - allowed
         if unknown:
             raise ValueError("unknown strategy settings: %s" % sorted(unknown))
-        self.market = MarketHandlers(context, qmt_api)
+        self.market = MarketHandlers(context, qmt_api, download_chunk_codes=config.get("download_chunk_codes", 10))
         types = config.get("account_types", ["STOCK"])
         if isinstance(types, str):
             types = [types]

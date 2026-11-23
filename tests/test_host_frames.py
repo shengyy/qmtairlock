@@ -32,13 +32,10 @@ def test_frame_axis_rows_keep_labels_and_values():
     assert pairs[1][1]["preClose"] == 10.0
 
 
-def test_ping_reports_the_host_interpreter_and_loaded_libraries():
+def test_ping_reports_the_host_interpreter():
     reply = BigQmtRpcHandlers("TEST").ping({})
     assert abs(reply["server_time"] - time.time()) < 5
-    host = reply["host"]
-    assert host["python"] == "%d.%d.%d" % sys.version_info[:3]
-    assert host["pandas"] == pd.__version__
-    assert host["numpy"] == sys.modules["numpy"].__version__
+    assert reply["host"] == {"python": "%d.%d.%d" % sys.version_info[:3]}
 
 
 def _bars_with(context):

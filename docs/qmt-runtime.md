@@ -20,7 +20,7 @@ The host must supply `ContextInfo.run_time` and the native methods required by t
 
 ## Runtime environment and threads
 
-The host is a **self-contained standard-library runtime with in-memory state and zero external middleware dependencies**. The host baseline is the Python 3.12 embedded in QMT client 2.1.36 (with pandas 3 and numpy 2); sources parse as Python 3.12. This baseline is not yet verified on a real terminal. Native bar frames are indexed by time labels, so host code reads columns positionally (`list(frame[column])`), never `series[i]`. `ping` reports the interpreter and, when the host has already loaded them, the pandas and numpy versions. Runtime boundary checks validate the embedded module graph and the allowed dependency surface.
+The host is a **self-contained standard-library runtime with in-memory state and zero external middleware dependencies**. The host baseline is the Python 3.12 library of the QMT client (pandas 3, numpy 2; read paths verified on client 2.1.33.0, see [status](status.md)); sources parse as Python 3.12. Native bar frames are indexed by time labels, so host code reads columns positionally (`list(frame[column])`), never `series[i]`. `ping` reports the interpreter and the pandas and numpy versions, from the loaded module or else the installed distribution's metadata, never by importing them. Runtime boundary checks validate the embedded module graph and the allowed dependency surface.
 
 The host graph includes the server listener, shared message I/O and native domain handlers. Client connection management, WSL relay processes, desktop launchers and local Parquet storage remain in their own external runtime. QMT manages its native data and strategy loading.
 

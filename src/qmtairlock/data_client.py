@@ -1,7 +1,7 @@
 """Market RPC client and client-only Parquet cache coordination."""
 
 from .data_frames import _divid_factors_frame, _normalize_market_data_frame, _normalize_market_data_result
-from .local_cache import LocalMarketCache
+from .local_cache import CacheFileInvalid, LocalMarketCache
 from .logging_setup import get_logger
 
 log = get_logger("data_client")
@@ -106,10 +106,23 @@ class BigQmtXtData:
             raise ValueError("get_local_data requires an enabled local Parquet cache")
         result = {}
         for code in stock_list or []:
-            frame = cache.read(code, period, start_time, end_time, count, dividend_type)
+            try:
+                frame = cache.read(code, period, start_time, end_time, count, dividend_type)
+            except CacheFileInvalid as exc:
+                # One invalid file costs that instrument only; the others in the request are still served.
+                log.warning("Local cache file skipped: %s", exc)
+                continue
             if frame is not None and len(frame):
                 frame = _normalize_market_data_frame(frame, field_list=field_list)
-                result[code] = frame[[name for name in field_list if name in frame.columns]] if field_list else frame
+                missing = [name for name in field_list or [] if name not in frame.columns]
+                if missing:
+                    log.warning(
+                        "Local cache file skipped: %s: missing requested column(s) %s",
+                        cache.path(code, period, dividend_type),
+                        ",".join(missing),
+                    )
+                    continue
+                result[code] = frame[list(field_list)] if field_list else frame
         return result
 
     def download_history_data2(self, stock_list, period, start_time="", end_time="", incrementally=None):

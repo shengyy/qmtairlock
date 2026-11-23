@@ -1,7 +1,11 @@
-"""Client-only Parquet cache: atomic, locked merges preserve omitted columns."""
+"""Client-only Parquet cache: validated rows, atomic locked merges that preserve omitted columns."""
 
 import os
 from contextlib import contextmanager
+
+from .logging_setup import get_logger
+
+log = get_logger("local_cache")
 
 _TIME_COLS = ("stime", "time", "index", "date", "datetime", "timetag")
 
@@ -44,15 +48,62 @@ def _align_start(value, sample):
     return text
 
 
-def _drop_placeholder_rows(df):
-    """Big QMT fills dates it has no local data for with all-zero rows. A real bar"""
-    for col in ("close", "open", "price", "lastPrice"):
-        if col in getattr(df, "columns", []):
-            try:
-                return df[df[col] != 0]
-            except Exception:
-                return df
-    return df
+_PRICE_COLS = ("open", "high", "low", "close", "price", "lastPrice")
+_SIZE_COLS = ("volume", "amount")
+BAR_COLUMNS = ("open", "high", "low", "close", "volume", "amount")
+
+
+def _is_bar_period(period):
+    text = str(period or "")
+    return not (text.startswith("tick") or text.startswith("l2"))
+
+
+def _missing_bar_columns(df, period):
+    """Core bar columns a bar-period file lacks; a file without them cannot serve a bar."""
+    if not _is_bar_period(period):
+        return []
+    return [name for name in BAR_COLUMNS if name not in df.columns]
+
+
+class CacheFileInvalid(ValueError):
+    """A cached file that fails the bar checks; the file is reported, never deleted."""
+
+
+def _row_problems(df):
+    """``{reason: boolean row mask}`` for bars no cache file may hold.
+
+    Missing values (NaN) are "not supplied" and pass; supplied values must be
+    real, so QMT's all-zero no-data padding fails on its prices. Zero-volume
+    bars stay: untraded minutes are real native bars and cannot be told apart
+    from ``fill_data=True`` padding by value.
+    """
+    import pandas as pd
+
+    columns = list(df.columns)
+    problems = {}
+    axis, on_index = _time_axis(df)
+    if axis is None:
+        problems["no time axis"] = pd.Series(True, index=df.index)
+    else:
+        labels = pd.Series(df.index if on_index else df[axis].values, index=df.index).astype(str)
+        digits = labels.str.replace(r"\D", "", regex=True).str.len()
+        problems["invalid time"] = ~digits.between(8, 14)
+    for column in _PRICE_COLS:
+        if column in columns:
+            values = pd.to_numeric(df[column], errors="coerce")
+            problems["invalid " + column] = values.notna() & ~(values > 0) | df[column].notna() & values.isna()
+    for column in _SIZE_COLS:
+        if column in columns:
+            values = pd.to_numeric(df[column], errors="coerce")
+            problems["invalid " + column] = values.notna() & ~(values >= 0) | df[column].notna() & values.isna()
+    if all(name in columns for name in ("open", "high", "low", "close")):
+        o, h, low, c = (pd.to_numeric(df[name], errors="coerce") for name in ("open", "high", "low", "close"))
+        problems["high/low outside open/close"] = (h < o) | (h < c) | (h < low) | (low > o) | (low > c)
+    return {reason: mask.fillna(False).astype(bool) for reason, mask in problems.items() if mask.any()}
+
+
+def _problem_summary(problems):
+    return ", ".join("%s: %d" % (reason, int(mask.sum())) for reason, mask in sorted(problems.items()))
 
 
 @contextmanager
@@ -108,6 +159,7 @@ class LocalMarketCache:
             raise ValueError("cache_dir and Parquet format are required")
         self.cache_dir = str(cache_dir)
         self.fmt = "parquet"
+        self.rejected_rows = {}
 
     def _existing_path(self, code, period, dividend_type):
         path = self.path(code, period, dividend_type)
@@ -140,13 +192,44 @@ class LocalMarketCache:
         """Merge ``df`` into the cache for (code, period, dividend_type)."""
         if df is None or not hasattr(df, "shape") or df.shape[0] == 0:
             return 0
-        incoming = _drop_placeholder_rows(df.copy())
+        incoming = self._accepted_rows(code, period, df.copy())
         primary = self.path(code, period, dividend_type)
         directory = os.path.dirname(primary)
         if directory and (not os.path.isdir(directory)):
             os.makedirs(directory, exist_ok=True)
         with _write_lock(primary[: -len(self._ext())] + ".lock"):
             return self._merge(code, period, dividend_type, incoming, primary)
+
+    def _reject(self, reason, count):
+        self.rejected_rows[reason] = self.rejected_rows.get(reason, 0) + int(count)
+
+    def _read_checked(self, path, period):
+        """A cached file that passes the bar checks, or CacheFileInvalid naming the file and reason."""
+        try:
+            df = self._read_file(path)
+        except Exception as exc:
+            raise CacheFileInvalid("%s: unreadable (%s: %s)" % (path, type(exc).__name__, exc)) from exc
+        missing = _missing_bar_columns(df, period)
+        if missing:
+            raise CacheFileInvalid("%s: missing columns %s" % (path, ",".join(missing)))
+        problems = _row_problems(df)
+        if problems:
+            raise CacheFileInvalid("%s: %s" % (path, _problem_summary(problems)))
+        return df
+
+    def _accepted_rows(self, code, period, df):
+        """Drop rows that fail the bar checks before they can reach a merge, and count them."""
+        problems = _row_problems(df)
+        if not problems:
+            return df
+        rejected = None
+        for reason, mask in problems.items():
+            self._reject(reason, mask.sum())
+            rejected = mask if rejected is None else rejected | mask
+        log.warning(
+            "cache rejected %d row(s) for %s %s (%s)", int(rejected.sum()), code, period, _problem_summary(problems)
+        )
+        return df[~rejected]
 
     def _merge(self, code, period, dividend_type, incoming, primary):
         import pandas as pd
@@ -159,15 +242,27 @@ class LocalMarketCache:
         merged = incoming
         _, incoming_on_index = _time_axis(incoming)
         if existing:
-            old = self._read_file(existing)
+            old = self._read_checked(existing, period)
             _, old_on_index = _time_axis(old)
-            merged = _preserve_omitted_columns(old, incoming)
+            # A narrower update is completed from the stored row; the completed row must pass the same checks.
+            merged = self._accepted_rows(code, period, _preserve_omitted_columns(old, incoming))
             if incoming_on_index and old_on_index:
                 merged = pd.concat([old, merged])
             elif incoming_on_index and (not old_on_index):
                 merged = incoming
             else:
                 merged = pd.concat([old, merged], ignore_index=True)
+        missing = _missing_bar_columns(merged, period)
+        if missing:
+            self._reject("missing columns", incoming.shape[0])
+            log.warning(
+                "cache rejected %d row(s) for %s %s (missing columns %s)",
+                incoming.shape[0],
+                code,
+                period,
+                ",".join(missing),
+            )
+            return self._read_file(existing).shape[0] if existing else 0
         axis, on_index = _time_axis(merged)
         if on_index:
             merged = merged[~merged.index.duplicated(keep="last")].sort_index()
@@ -194,10 +289,7 @@ class LocalMarketCache:
         existing = self._existing_path(code, period, dividend_type)
         if not existing:
             return None
-        try:
-            df = self._read_file(existing)
-        except Exception:
-            return None
+        df = self._read_checked(existing, period)
         axis, on_index = _time_axis(df)
         if axis:
             if start_time:
@@ -226,6 +318,21 @@ class LocalMarketCache:
             return (None, None, df.shape[0])
         series = list(df.index.astype(str)) if on_index else list(df[axis].astype(str))
         return (series[0], series[-1], df.shape[0])
+
+    def audit(self):
+        """Read-only: ``[(path, reason), ...]`` for every cached file that fails the checks."""
+        failures = []
+        for root, _dirs, fnames in os.walk(self.cache_dir):
+            for fname in sorted(fnames):
+                if not fname.endswith(self._ext()):
+                    continue
+                path = os.path.join(root, fname)
+                period = os.path.relpath(path, self.cache_dir).split(os.sep)[0]
+                try:
+                    self._read_checked(path, period)
+                except CacheFileInvalid as exc:
+                    failures.append((path, str(exc)[len(path) + 2 :]))
+        return failures
 
     def stats(self):
         """Return (files, periods) currently cached across all dividend types."""

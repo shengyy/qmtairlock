@@ -10,7 +10,7 @@ Current release: **0.1.1**. This document records the verified environment bound
 | Trading contracts | Isolated tests for option/credit enum mapping, native identifiers, expiry, unknown writes, reconciliation and callback ordering |
 | Pipe/relay | Mocked native lifecycle races plus real local subprocess framing tests |
 | Windows local IPC | Platform tests are provided; skipped on the current macOS development machine |
-| QMT terminal | Target host is QMT client 2.1.36 (embedded Python 3.12+, pandas 3); not yet verified on a terminal. Native read and controlled execution acceptance remain operator tasks |
+| QMT terminal | Read paths verified 2026-11-23 on a brokerage QMT client 2.1.33.0 with its optional Python 3.12.10 library (pandas 3.0.2, numpy 2.4.4): strategy load and auto-run after a client restart, `ping`, clock skew, account snapshot, full ticks, instrument detail, local 1m/5m/30m reads and chunked 1m/5m history downloads (about 60-90 ms per stock for five days of 1m). The 2.1.36 client was not offered by the broker. Not yet exercised on this host: order and cancel writes, expired-request refusal and the outcome query, credit, option and formula reads |
 | Production | This release does not itself install a strategy, change a service or enable broker writes |
 
 Before declaring a terminal supported, record the exact broker build and embedded Python version, read-only market/account/credit/option/formula results, callback scheduling, stop/restart behavior, and Windows/WSL pipe tests. Execution acceptance requires separately authorized controlled order/cancel checks. Update this document with current evidence rather than keeping a chronological process log.

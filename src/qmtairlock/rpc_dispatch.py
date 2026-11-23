@@ -43,14 +43,8 @@ METHOD_ALIASES = {
 
 
 def host_runtime():
-    """The embedded interpreter, plus pandas/numpy only when the host already loaded them."""
-
-    def loaded(name):
-        module = sys.modules.get(name)
-        version = getattr(module, "__version__", None)
-        return str(version) if version is not None else None
-
-    return {"python": "%d.%d.%d" % tuple(sys.version_info[:3]), "pandas": loaded("pandas"), "numpy": loaded("numpy")}
+    """The embedded interpreter version."""
+    return {"python": "%d.%d.%d" % tuple(sys.version_info[:3])}
 
 
 def canonical_method(method):

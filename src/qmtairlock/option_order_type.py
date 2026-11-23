@@ -1,4 +1,4 @@
-"""Translate ETF option execution fields to MiniQMT order types (Python 3.6)."""
+"""Translate ETF option execution fields to MiniQMT order types."""
 
 
 def option_native_optype(order_type):

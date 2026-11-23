@@ -56,13 +56,10 @@ def _frame_axis_rows(frame):
             out.append((row.get("stime"), row))
         return out
     if hasattr(frame, "columns") and hasattr(frame, "index"):
-        try:
-            columns = [name for name in frame.columns]
-            labels = list(frame.index)
-            series = dict(((name, list(frame[name])) for name in columns))
-            return [(labels[i], dict(((str(name), series[name][i]) for name in columns))) for i in range(len(labels))]
-        except Exception:
-            return []
+        columns = [name for name in frame.columns]
+        labels = list(frame.index)
+        series = dict(((name, list(frame[name])) for name in columns))
+        return [(labels[i], dict(((str(name), series[name][i]) for name in columns))) for i in range(len(labels))]
     return [(row.get("stime") or row.get("index") or row.get("time"), row) for row in _frame_rows(frame)]
 
 

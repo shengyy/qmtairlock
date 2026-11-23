@@ -47,6 +47,6 @@ Each client thread owns its native connection or relay process. Unknown write ou
 
 ## Single-file build
 
-The builder traverses the relative-import graph from `strategy_runtime` and `qmt_injected`. Each source module becomes a real `def _mod_N():` body in the GBK artifact. A private loader executes those bodies in separate module namespaces and captures the QMT globals before loading the runtime. It does not install a global import hook or overwrite `sys.modules`.
+The builder traverses the relative-import graph from `strategy_runtime` and `qmt_injected`. Each source module becomes a real `def _mod_N():` body in the artifact. The artifact is pure ASCII: non-ASCII text in comments and ordinary string literals is written as `\uXXXX`, and the build fails if that changes any compiled constant. The `# coding: gbk` first line is kept only because QMT documents it; it does not affect decoding of an ASCII file. A private loader executes those bodies in separate module namespaces and captures the QMT globals before loading the runtime. It does not install a global import hook or overwrite `sys.modules`.
 
 Source modules remain independently testable. The manifest records SHA-256 hashes of every included source module and the complete generated file. All client, relay and desktop launcher modules are excluded from the host graph. Shared message I/O has its own owner, and runtime boundary checks enforce this dependency direction.

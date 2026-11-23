@@ -18,7 +18,7 @@ The local channel exchanges one complete JSON request or response per message. T
 
 | Domain | Entry points |
 |---|---|
-| Health | `BigQmtRpcClient.call("ping")` returns account types, package version and the write gate |
+| Health | `BigQmtRpcClient.call("ping")` returns account types, package version, the write gate and `host`: `python` (`major.minor.micro`), `pandas` and `numpy` versions, each `null` unless the host had already loaded that library |
 | Market | `BigQmtXtData`: ticks, bars, downloads, dividends, instruments, sectors, calendars and native extension getters |
 | Accounts | `BigQmtXtTrader`: asset, positions, position statistics, orders, trades and one combined execution snapshot |
 | Execution | `order_stock_result`, `order_stock`, async order/cancel, batch order/cancel and `passorder` |

@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Target the QMT 2.1.36 host (embedded Python 3.12, pandas 3, numpy 2) as the only host baseline; the Python 3.6 syntax limit and its ctypes fallbacks are removed.
+- Build `QMTAIRLOCK.py` as pure ASCII so the host's source decoding cannot alter non-ASCII literals; the build fails if escaping would change any constant.
+
+### Added
+
+- `ping` reports the host interpreter version and, when already loaded by the host, pandas and numpy versions.
+
 ### Fixed
+
+- Read native bar frames by position so label-indexed pandas 3 frames no longer turn dividend-range scans into empty results; frame shape errors now propagate instead of returning no rows.
 
 - Keep single-date dividend queries on the callback thread so queued history reads cannot delay them; only date ranges use the heavy worker.
 - Keep native history downloads on the callback thread so large market reads cannot queue ahead of a small download.

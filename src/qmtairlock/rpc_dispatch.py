@@ -1,5 +1,7 @@
 """RPC routing, bound-account checks and hard main-thread method boundaries."""
 
+import sys
+
 from .account_scope import AccountBinding, request_account_type
 from .rpc_account_handlers import AccountHandlers
 from .rpc_credit import CreditHandlers
@@ -37,6 +39,17 @@ METHOD_ALIASES = {
     "cancel_order_stock_sysid": "cancel_order",
     "cancel_order_stock_batch": "cancel_orders_batch",
 }
+
+
+def host_runtime():
+    """The embedded interpreter, plus pandas/numpy only when the host already loaded them."""
+
+    def loaded(name):
+        module = sys.modules.get(name)
+        version = getattr(module, "__version__", None)
+        return str(version) if version is not None else None
+
+    return {"python": "%d.%d.%d" % tuple(sys.version_info[:3]), "pandas": loaded("pandas"), "numpy": loaded("numpy")}
 
 
 def canonical_method(method):
@@ -115,6 +128,7 @@ class BigQmtRpcHandlers:
             "version": __version__,
             "allow_order_methods": self.allow_order_methods,
             "rpc_revision": "qmtairlock-v1",
+            "host": host_runtime(),
         }
 
     def handle(self, method, params=None):

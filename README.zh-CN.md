@@ -14,7 +14,7 @@
 >
 > 本项目为独立技术实验代码，与迅投（XtQuant / QMT）及任何证券公司均无关联，亦未获其官方背书。本段为维护者的用途声明，软件授权条款见 [LICENSE](LICENSE)。
 
-策略采用自包含的标准库实现、纯内存运行态和零外部中间件依赖，通过 QMT 原生 API 与同机消息通道提供能力。Windows 客户端本地连接；WSL 客户端使用 Windows Python stdio 中继。生成的 GBK 入口为 `QMTAIRLOCK.py`。
+策略采用自包含的标准库实现、纯内存运行态和零外部中间件依赖，通过 QMT 原生 API 与同机消息通道提供能力。Windows 客户端本地连接；WSL 客户端使用 Windows Python stdio 中继。生成的纯 ASCII 入口为 `QMTAIRLOCK.py`。
 
 ## 安装与读取
 

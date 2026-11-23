@@ -58,17 +58,16 @@ def _frame_rows(frame):
     if isinstance(frame, dict) and frame.get("__bigqmt_type__") == "DataFrame":
         return _frame_rows(frame.get("records") or [])
     if hasattr(frame, "columns") and hasattr(frame, "iloc"):
-        try:
-            columns = list(frame.columns)
-            return [{name: frame[name][i] for name in columns} for i in range(len(frame))]
-        except Exception:
-            return []
+        # Native frames are indexed by time labels; read columns positionally.
+        columns = {name: list(frame[name]) for name in frame.columns}
+        return [{name: values[i] for name, values in columns.items()} for i in range(len(frame))]
     if isinstance(frame, (list, tuple)):
         return [row for row in frame if isinstance(row, dict)]
     if isinstance(frame, dict):
         columns = {k: v for k, v in frame.items() if hasattr(v, "__len__") and (not isinstance(v, (str, bytes)))}
         if not columns:
             return [dict(frame)]
+        columns = {k: list(v) for k, v in columns.items()}
         length = min((len(v) for v in columns.values()))
         return [{k: v[i] for k, v in columns.items()} for i in range(length)]
     return []

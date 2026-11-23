@@ -1,4 +1,4 @@
-"""Build the Python 3.6 / GBK strategy from a closed, auditable module graph."""
+"""Build the ASCII, Python 3.12 host strategy from a closed, auditable module graph."""
 
 import argparse
 import ast
@@ -10,6 +10,7 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+HOST_PYTHON = (3, 12)
 FORBIDDEN_IMPORTS = {"socket", "redis", "zmq", "pandas", "pyarrow", "subprocess", "xtquant", "pathlib"}
 
 
@@ -36,7 +37,7 @@ def collect_sources():
             raise ValueError("client-side module in host graph: " + name)
         path = module_path(name)
         source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, feature_version=(3, 6))
+        tree = ast.parse(source, feature_version=HOST_PYTHON)
         sources[name] = source
         parent = name.rpartition(".")[0]
         if parent:
@@ -108,6 +109,37 @@ def indent_source(source):
     )
 
 
+def _escape(char):
+    point = ord(char)
+    return "\\u%04x" % point if point <= 0xFFFF else "\\U%08x" % point
+
+
+def code_constants(code):
+    """Every literal value of a code object and its nested bodies, in order."""
+    values = []
+    for constant in code.co_consts:
+        if hasattr(constant, "co_consts"):
+            values.extend(code_constants(constant))
+        else:
+            values.append(constant)
+    return values
+
+
+def ascii_source(source):
+    """The same program spelled in ASCII, so the host's source decoding cannot change it.
+
+    Non-ASCII text may only sit in comments and ordinary string literals, where
+    ``\\uXXXX`` spells the same character. Any other placement (identifiers, raw
+    strings, a preceding backslash) changes the compiled constants and fails here.
+    """
+    escaped = "".join(char if ord(char) < 128 else _escape(char) for char in source)
+    if escaped != source and code_constants(compile(escaped, "<ascii>", "exec")) != code_constants(
+        compile(source, "<source>", "exec")
+    ):
+        raise ValueError("non-ASCII text outside comments and ordinary string literals")
+    return escaped
+
+
 def build(output):
     sources = collect_sources()
     blocks, funcs = [], []
@@ -126,12 +158,12 @@ def build(output):
         "_MODULE_FUNCS = {}  # Replaced with real module function bodies at build time.",
         "".join(blocks) + "\n_MODULE_FUNCS = {\n" + "\n".join(funcs) + "\n}",
     )
-    body = "# coding: gbk\n" + body.replace("_PACKAGES = ()", "_PACKAGES = %r" % (packages,))
-    data = body.encode("gbk", errors="backslashreplace")
-    decoded = data.decode("gbk")
-    ast.parse(decoded, feature_version=(3, 6))
+    # Pure ASCII reads the same under any host decoding; the cookie only keeps the documented first line.
+    body = "# coding: gbk\n" + ascii_source(body.replace("_PACKAGES = ()", "_PACKAGES = %r" % (packages,)))
+    data = body.encode("ascii")
     output = Path(output)
-    code = compile(decoded, output.name, "exec")
+    ast.parse(body, feature_version=HOST_PYTHON)
+    code = compile(body, output.name, "exec")
     for constant in code.co_consts:
         if hasattr(constant, "co_name") and constant.co_name.startswith("_mod_") and constant.co_cellvars:
             raise ValueError("module bindings became closure cells: " + constant.co_name)
@@ -140,8 +172,8 @@ def build(output):
     manifest = {
         "schema_version": 1,
         "artifact": output.name,
-        "encoding": "gbk",
-        "host_python": "3.6",
+        "encoding": "ascii",
+        "host_python": "%d.%d" % HOST_PYTHON,
         "sha256": hashlib.sha256(data).hexdigest(),
         "modules": {name: hashlib.sha256(source.encode()).hexdigest() for name, source in sources.items()},
     }

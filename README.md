@@ -14,7 +14,7 @@ Local IPC bridge and Python client for QMT research and experimentation (non-com
 >
 > This is an independent technical experiment, unaffiliated with and not officially endorsed by XtQuant / QMT or any securities company. This is a statement of intended use; software license terms are in [LICENSE](LICENSE).
 
-The strategy is a self-contained standard-library runtime with in-memory state and zero external middleware dependencies. It uses QMT's native APIs and a same-host message channel. Windows clients connect locally; WSL clients use a Windows Python stdio relay. The generated GBK entry is `QMTAIRLOCK.py`.
+The strategy is a self-contained standard-library runtime with in-memory state and zero external middleware dependencies. It uses QMT's native APIs and a same-host message channel. Windows clients connect locally; WSL clients use a Windows Python stdio relay. The generated pure-ASCII entry is `QMTAIRLOCK.py`.
 
 ## Install and read
 

@@ -43,25 +43,8 @@ METHOD_ALIASES = {
 
 
 def host_runtime():
-    """The embedded interpreter and the host's pandas/numpy versions, read without importing either."""
-
-    def installed(name):
-        version = getattr(sys.modules.get(name), "__version__", None)
-        if version is None:
-            # Not visible as a loaded module here: read the installed distribution's metadata instead.
-            try:
-                from importlib import metadata
-
-                version = metadata.version(name)
-            except Exception:
-                return None
-        return str(version)
-
-    return {
-        "python": "%d.%d.%d" % tuple(sys.version_info[:3]),
-        "pandas": installed("pandas"),
-        "numpy": installed("numpy"),
-    }
+    """The embedded interpreter version."""
+    return {"python": "%d.%d.%d" % tuple(sys.version_info[:3])}
 
 
 def canonical_method(method):

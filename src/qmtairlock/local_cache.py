@@ -244,7 +244,8 @@ class LocalMarketCache:
         if existing:
             old = self._read_checked(existing, period)
             _, old_on_index = _time_axis(old)
-            merged = _preserve_omitted_columns(old, incoming)
+            # A narrower update is completed from the stored row; the completed row must pass the same checks.
+            merged = self._accepted_rows(code, period, _preserve_omitted_columns(old, incoming))
             if incoming_on_index and old_on_index:
                 merged = pd.concat([old, merged])
             elif incoming_on_index and (not old_on_index):

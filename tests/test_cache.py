@@ -83,13 +83,26 @@ def test_an_invalid_file_is_reported_with_its_path_and_left_in_place(tmp_path):
     assert Path(path).exists()
 
 
-def test_requested_fields_missing_from_the_cache_are_an_error(tmp_path):
+def test_an_instrument_whose_file_lacks_a_requested_field_is_left_out(tmp_path):
     data = BigQmtXtData(
         SimpleNamespace(local_cache_config={"enabled": True, "dir": str(tmp_path), "format": "parquet"})
     )
     data._local_cache().write("X", "1m", _bars())
-    with pytest.raises(CacheFileInvalid, match="missing column\\(s\\) preClose"):
-        data.get_local_data(field_list=["close", "preClose"], stock_list=["X"], period="1m")
+    data._local_cache().write("Y", "1m", _bars(preClose=[10.0, 10.1]))
+    got = data.get_local_data(field_list=["close", "preClose"], stock_list=["X", "Y"], period="1m")
+    assert list(got) == ["Y"]
+    assert list(got["Y"].columns) == ["close", "preClose"]
+
+
+def test_a_narrow_update_that_would_complete_into_an_invalid_row_is_rejected(tmp_path):
+    cache = LocalMarketCache(str(tmp_path))
+    cache.write("X", "1m", _bars())
+    narrow = pd.DataFrame({"close": [11.5, 10.25]}, index=STAMPS)  # 11.5 is above the stored high of 10.2
+    assert cache.write("X", "1m", narrow) == 2
+    assert cache.rejected_rows == {"high/low outside open/close": 1}
+    out = cache.read("X", "1m")
+    assert list(out["close"]) == [10.1, 10.25]
+    assert cache.write("X", "1m", _bars()) == 2
 
 
 def test_an_invalid_file_is_left_out_of_a_multi_instrument_read(tmp_path):

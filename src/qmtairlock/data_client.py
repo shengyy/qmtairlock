@@ -116,10 +116,13 @@ class BigQmtXtData:
                 frame = _normalize_market_data_frame(frame, field_list=field_list)
                 missing = [name for name in field_list or [] if name not in frame.columns]
                 if missing:
-                    raise CacheFileInvalid(
-                        "%s: missing column(s) %s" % (cache.path(code, period, dividend_type), ",".join(missing))
+                    log.warning(
+                        "Local cache file skipped: %s: missing requested column(s) %s",
+                        cache.path(code, period, dividend_type),
+                        ",".join(missing),
                     )
-                result[code] = frame[[name for name in field_list if name in frame.columns]] if field_list else frame
+                    continue
+                result[code] = frame[list(field_list)] if field_list else frame
         return result
 
     def download_history_data2(self, stock_list, period, start_time="", end_time="", incrementally=None):

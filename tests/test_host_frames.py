@@ -32,37 +32,10 @@ def test_frame_axis_rows_keep_labels_and_values():
     assert pairs[1][1]["preClose"] == 10.0
 
 
-def test_ping_reports_the_host_interpreter_and_loaded_libraries():
+def test_ping_reports_the_host_interpreter():
     reply = BigQmtRpcHandlers("TEST").ping({})
     assert abs(reply["server_time"] - time.time()) < 5
-    host = reply["host"]
-    assert host["python"] == "%d.%d.%d" % sys.version_info[:3]
-    assert host["pandas"] == pd.__version__
-    assert host["numpy"] == sys.modules["numpy"].__version__
-
-
-def test_ping_reads_installed_versions_when_the_libraries_are_not_loaded_modules(monkeypatch):
-    from qmtairlock.rpc_dispatch import host_runtime
-
-    monkeypatch.delitem(sys.modules, "pandas")
-    monkeypatch.delitem(sys.modules, "numpy")
-    host = host_runtime()
-    assert host["pandas"] == pd.__version__
-    assert host["numpy"] is not None
-    assert "pandas" not in sys.modules and "numpy" not in sys.modules
-
-
-def test_ping_reports_null_for_a_library_the_host_does_not_have(monkeypatch):
-    from importlib import metadata
-
-    from qmtairlock.rpc_dispatch import host_runtime
-
-    def missing(_name):
-        raise metadata.PackageNotFoundError(_name)
-
-    monkeypatch.delitem(sys.modules, "pandas")
-    monkeypatch.setattr(metadata, "version", missing)
-    assert host_runtime()["pandas"] is None
+    assert reply["host"] == {"python": "%d.%d.%d" % sys.version_info[:3]}
 
 
 def _bars_with(context):

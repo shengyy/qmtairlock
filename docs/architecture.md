@@ -41,7 +41,7 @@ flowchart LR
 
 The local listener accepts connections. `adjust` drains requests; all account, credit and order methods are hard-routed to the callback thread. Large/history market reads and formula execution use one worker. Worker results return through the original connection object, so recycled integer handles cannot receive stale replies.
 
-Deadlines are assigned when requests enter the server. Expired orders are refused, with another check immediately before native dispatch. Cancellation is allowed to make progress after its queue deadline. Native requests already inside QMT cannot be force-aborted by Python. A live worker prevents replacement of the runtime during reinitialization.
+Deadlines are the earlier of the server receive deadline and the client-stamped `deadline_at`. Expired orders are refused, with another check immediately before native dispatch. Cancellation is allowed to make progress after its queue deadline. Native requests already inside QMT cannot be force-aborted by Python. A live worker prevents replacement of the runtime during reinitialization.
 
 Each client thread owns its native connection or relay process. Unknown write outcomes never trigger a transparent resend. Async order responses precede matching polling events; unrelated events can still be delivered. A trader instance subscribes to one account type; use separate instances for separate callback scopes.
 

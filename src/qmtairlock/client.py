@@ -1,6 +1,7 @@
 """Single-send RPC client over native named pipes or the WSL stdio relay."""
 
 import threading
+import time
 import uuid
 
 from .config import client_config, positive_seconds
@@ -53,6 +54,7 @@ class BigQmtRpcClient:
             "method": str(method),
             "params": dict(params or {}),
             "timeout_seconds": timeout,
+            "deadline_at": time.time() + timeout,
         }
         response = self._transport().send_request(request, timeout)
         if not isinstance(response, dict) or response.get("request_id") != request["request_id"]:

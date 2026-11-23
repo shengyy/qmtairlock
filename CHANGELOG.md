@@ -9,6 +9,7 @@
 
 ### Added
 
+- Requests carry the client deadline (`deadline_at`); a request that waited unread past it, for example behind a native download, is refused instead of running after the client gave up.
 - `ping` reports the host interpreter version and, when already loaded by the host, pandas and numpy versions.
 
 ### Fixed

@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from build_strategy import ascii_source, build, code_constants, collect_sources
 from check_host import check
 
+from qmtairlock.rpc_service import RpcService
+
 
 class Transport:
     def __init__(self, **kwargs):
@@ -194,3 +196,59 @@ def test_account_and_credit_methods_never_escape_main_thread():
     assert seen == []
     service.drain_pending(500)
     assert seen and set(seen) == {main_ident}
+
+
+class RecordingHandlers:
+    def __init__(self):
+        self.calls = []
+
+    def handle(self, method, params):
+        self.calls.append(method)
+        return {"ok": method}
+
+
+def test_request_left_unread_past_the_client_deadline_is_refused_not_run():
+    handlers = RecordingHandlers()
+    transport = Transport()
+    service = RpcService(handlers, "TEST", transport, process_in_listener=False)
+    now = time.time()
+    base = {"account_id": "TEST", "params": {}, "timeout_seconds": 30}
+    # Read off the pipe just now (fresh receive time) but the client gave up long ago.
+    service.enqueue_payload(dict(base, request_id="stale", method="download_history_data2", deadline_at=now - 60))
+    service.enqueue_payload(dict(base, request_id="fresh", method="ping", deadline_at=now + 30))
+    service.enqueue_payload(dict(base, request_id="cancel", method="cancel_order", deadline_at=now - 60))
+    service.drain_pending(10)
+    replies = {reply["request_id"]: reply for reply in transport.replies}
+    assert (
+        replies["stale"]["ok"] is False and replies["stale"]["error"] == "TimeoutError: RequestExpired: not dispatched"
+    )
+    assert replies["fresh"]["ok"] is True
+    assert handlers.calls == ["ping", "cancel_order"]
+
+
+def test_client_deadline_tolerates_small_clock_differences():
+    from qmtairlock.rpc_service import CLIENT_DEADLINE_TOLERANCE_SECONDS, request_deadline
+
+    now = time.time()
+    request = {"timeout_seconds": 30, "_received_at": now, "deadline_at": now - 0.5}
+    assert request_deadline(request) == now - 0.5 + CLIENT_DEADLINE_TOLERANCE_SECONDS
+    assert request_deadline({"timeout_seconds": 30, "_received_at": now}) == now + 30 - 0.05
+    with pytest.raises(ValueError, match="deadline_at"):
+        request_deadline({"timeout_seconds": 1, "deadline_at": float("nan")})
+
+
+def test_client_stamps_its_own_deadline_on_every_request():
+    from qmtairlock.client import BigQmtRpcClient
+
+    sent = []
+
+    class Echo:
+        def send_request(self, request, timeout):
+            sent.append(request)
+            return {"request_id": request["request_id"], "account_id": "TEST", "ok": True, "data": None}
+
+    client = BigQmtRpcClient("TEST", timeout_seconds=7)
+    client._transport_instance = Echo()
+    before = time.time()
+    client.call("ping")
+    assert before + 7 <= sent[0]["deadline_at"] <= time.time() + 7

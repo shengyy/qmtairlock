@@ -12,6 +12,32 @@ from .rpc_codec import to_jsonable
 from .rpc_dispatch import LISTENER_DEFERRED_METHODS, ORDER_METHODS, canonical_method
 from .rpc_settlement import PendingSettlement, SettlementManager
 
+# Same-host wall clocks (Windows and WSL) may differ slightly; never refuse before this margin.
+CLIENT_DEADLINE_TOLERANCE_SECONDS = 1.0
+
+
+def request_deadline(request):
+    """The earliest of the server receive deadline and the client's own deadline, or None.
+
+    A request can sit unread in the pipe while the callback thread is busy; its
+    receive time is then late, but the client's ``deadline_at`` still says when
+    nobody is waiting for it any more.
+    """
+    timeout = float(request.get("timeout_seconds", 0))
+    if not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("timeout_seconds must be finite and nonnegative")
+    deadlines = []
+    received = request.get("_received_at")
+    if received is not None and timeout > 0:
+        deadlines.append(received + timeout - min(0.05, timeout * 0.25))
+    client = request.get("deadline_at")
+    if client is not None:
+        client = float(client)
+        if not math.isfinite(client):
+            raise ValueError("deadline_at must be finite")
+        deadlines.append(client + CLIENT_DEADLINE_TOLERANCE_SECONDS)
+    return min(deadlines) if deadlines else None
+
 
 class RpcService:
     def __init__(
@@ -264,24 +290,17 @@ class RpcService:
                         self._publish_response(request, response)
                     return response
                 claimed = True
-            timeout = float(request.get("timeout_seconds", 0))
-            if not math.isfinite(timeout) or timeout < 0:
-                raise ValueError("timeout_seconds must be finite and nonnegative")
-            received = request.get("_received_at")
+            deadline = request_deadline(request)
             if (
                 method not in {"cancel_order", "cancel_orders_batch"}
-                and received is not None
-                and timeout > 0
-                and time.time() >= received + timeout - min(0.05, timeout * 0.25)
+                and deadline is not None
+                and time.time() >= deadline
             ):
                 state = "refused"
                 raise TimeoutError("RequestExpired: not dispatched")
             if method == "get_request_outcome":
                 result = self._outcome(request)
             else:
-                deadline = (
-                    received + timeout - min(0.05, timeout * 0.25) if received is not None and timeout > 0 else None
-                )
                 with dispatch_deadline(deadline):
                     result = self.handlers.handle(method, params)
             if isinstance(result, PendingSettlement):

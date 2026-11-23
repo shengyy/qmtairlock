@@ -5,8 +5,10 @@
 Requests are UTF-8 JSON objects:
 
 ```json
-{"schema_version":1,"request_id":"unique-id","account_id":"YOUR_ACCOUNT","method":"ping","params":{},"timeout_seconds":6}
+{"schema_version":1,"request_id":"unique-id","account_id":"YOUR_ACCOUNT","method":"ping","params":{},"timeout_seconds":6,"deadline_at":1795000000.0}
 ```
+
+`deadline_at` is the client's wall-clock deadline in epoch seconds, stamped by `BigQmtRpcClient.call`. It is optional for hand-written clients.
 
 Replies repeat `request_id` and `account_id`, with `ok`, `data` or `error`. Clients reject mismatched identities. Typed payload metadata preserves frames, arrays and native object fields. Missing position quantities are errors; valid native zero quantities remain zero. Broker order identifiers stay strings, including leading zeros. `OrderId` additionally supports integer-style client APIs while carrying the exact string in `order_sys_id`.
 
@@ -34,7 +36,7 @@ Every client is bound to one account id. `params.account_type` selects an allowe
 
 ## Outcomes and deadlines
 
-The client applies one connection/write/read deadline. The server assigns its own receive-time deadline and checks it again immediately before an order is sent. An expired queued order is refused; cancellation remains eligible to run. A timeout or lost connection after sending can leave an unknown native result. There is no transparent retry of that request.
+The client applies one connection/write/read deadline. The server deadline is the earlier of its receive time plus `timeout_seconds` and `deadline_at` plus one second of clock tolerance; a request can wait unread in the channel while the callback thread is busy, so the client deadline is what bounds it. Any request other than cancellation that reaches dispatch after that deadline is refused with `RequestExpired: not dispatched` and never runs; orders are checked again immediately before native dispatch. Cancellation remains eligible to run. A timeout or lost connection after sending can leave an unknown native result. There is no transparent retry of that request.
 
 In-memory server deduplication covers `(account_id, request_id)` and a bounded batch identity journal. It is not durable across a strategy restart. Applications must persist their own execution intent and reconcile unknown outcomes against QMT facts before deciding any next action.
 

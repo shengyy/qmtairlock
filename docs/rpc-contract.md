@@ -20,7 +20,7 @@ The local channel exchanges one complete JSON request or response per message. T
 
 | Domain | Entry points |
 |---|---|
-| Health | `BigQmtRpcClient.call("ping")` returns account types, package version, the write gate, `server_time` (host epoch seconds) and `host`: `python` (`major.minor.micro`), `pandas` and `numpy` versions, each `null` unless the host had already loaded that library. `BigQmtRpcClient.clock_skew()` reads `server_time` against the local send/receive midpoint and reports `skew_seconds` and `round_trip_seconds`; it never adjusts a clock |
+| Health | `BigQmtRpcClient.call("ping")` returns account types, package version, the write gate, `server_time` (host epoch seconds) and `host`: `python` (`major.minor.micro`), `pandas` and `numpy` versions, taken from the loaded module or else from the installed distribution's metadata without importing it, `null` when neither is available (on the 2.1.33 host with the Python 3.12 library the loaded-module lookup returned `null` for both; the metadata lookup is not yet verified there). `BigQmtRpcClient.clock_skew()` reads `server_time` against the local send/receive midpoint and reports `skew_seconds` and `round_trip_seconds`; it never adjusts a clock |
 | Market | `BigQmtXtData`: ticks, bars, downloads, dividends, instruments, sectors, calendars and native extension getters |
 | Accounts | `BigQmtXtTrader`: asset, positions, position statistics, orders, trades and one combined execution snapshot |
 | Execution | `order_stock_result`, `order_stock`, async order/cancel, batch order/cancel and `passorder` |

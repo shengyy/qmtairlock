@@ -41,6 +41,30 @@ def test_ping_reports_the_host_interpreter_and_loaded_libraries():
     assert host["numpy"] == sys.modules["numpy"].__version__
 
 
+def test_ping_reads_installed_versions_when_the_libraries_are_not_loaded_modules(monkeypatch):
+    from qmtairlock.rpc_dispatch import host_runtime
+
+    monkeypatch.delitem(sys.modules, "pandas")
+    monkeypatch.delitem(sys.modules, "numpy")
+    host = host_runtime()
+    assert host["pandas"] == pd.__version__
+    assert host["numpy"] is not None
+    assert "pandas" not in sys.modules and "numpy" not in sys.modules
+
+
+def test_ping_reports_null_for_a_library_the_host_does_not_have(monkeypatch):
+    from importlib import metadata
+
+    from qmtairlock.rpc_dispatch import host_runtime
+
+    def missing(_name):
+        raise metadata.PackageNotFoundError(_name)
+
+    monkeypatch.delitem(sys.modules, "pandas")
+    monkeypatch.setattr(metadata, "version", missing)
+    assert host_runtime()["pandas"] is None
+
+
 def _bars_with(context):
     from qmtairlock.adapters.market_bars import MarketBars
     from qmtairlock.adapters.market_context import MarketContext
